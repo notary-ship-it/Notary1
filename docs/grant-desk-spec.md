@@ -250,17 +250,46 @@ restores intake, notice and assessment and jumps to the furthest tab that has da
 an *organization*, not a contact, and it returns name, type, website, phone, address and private
 notes. It runs through `take_action_read_only` on the viewer's own connector.
 
-**FluentCRM has no path from the page, and will not get one.** It is not a claude.ai connector and
-it is not in Zapier's catalog at all (searched: zero results). Its REST API lives on the WordPress
-site, which the sandbox cannot reach for the same reason it cannot fetch a notice URL. So:
+**FluentCRM has no *direct* path from the page.** It is not a claude.ai connector and it is not in
+Zapier's catalog at all (searched: zero results). Its REST API lives on the WordPress site, which
+the sandbox cannot reach for the same reason it cannot fetch a notice URL. So:
 
 - **now** — FluentCRM contacts come in as a CSV export. The importer resolves company /
   organization / name / first+last columns by header, in that precedence, and falls back to
   substring matching *only after* the exactly-matched columns are excluded (without that, `name`
   matches `first_name` and the import silently drops every surname — caught by a test).
-- **properly, later** — FluentCRM *is* WordPress. The client-view page in §7 runs on the same
-  install, so the join needs no HTTP at all: a WP endpoint reads FluentCRM's tables directly.
-  That is the real integration, and it lands with the WordPress work rather than before it.
+- **properly** — through **Novamira**, below.
+
+### Novamira: the WordPress bridge
+
+[Novamira](https://novamira.ai/) is a self-hosted WordPress plugin that turns the site into an MCP
+server, exposing PHP execution with `$wpdb`, database inspection, WP-CLI, and filesystem access to
+a connected agent. Since FluentCRM *is* WordPress, Novamira is the FluentCRM join — no CSV, no
+Zapier, no bespoke endpoint. It also makes the §7 client-view work buildable in place rather than
+handed over as code to paste.
+
+Two connection modes, and the difference is the whole reason this has been confusing:
+
+| Mode | Reaches | Use |
+| --- | --- | --- |
+| Local stdio | the machine it is installed on | desktop Claude Code only |
+| Remote HTTP + OAuth | any client that can add a connector | **this is the one that works from a cloud session** |
+
+A Novamira folder sitting on a desktop is the local mode. A Claude Code session on the web runs in
+an ephemeral cloud container seeded from the GitHub repo alone — it cannot see that machine's
+filesystem or its MCP config, so a locally-installed server never appears there however many times
+it is handed over. The fix is to add Novamira as a claude.ai connector over OAuth (1.9.1+; Claude.ai
+has a one-click button), after which it is visible to cloud sessions and declarable in an artifact
+manifest like any other connector.
+
+**Security posture, to decide deliberately.** Novamira's grant is arbitrary PHP and database access
+on a production site. That is the right tool for build work driven from a session, where a human is
+reading each step. It is a much larger grant to hand a *published page*: declaring those tools in
+the Grant Desk's `mcp` manifest would let the page execute PHP against the live site. Current
+recommendation: use Novamira from sessions, keep the page's manifest to the narrow read-only
+connectors it already declares, and revisit only if Novamira exposes a tool scoped tightly enough
+to be worth declaring. As always, nothing gets declared in the page until a real request and
+response for that tool have been observed.
 
 Either way, an import brings what a CRM knows — who the client is — and nothing it never held. EIN,
 UEI, SAM status and the document registry all arrive `PENDING`, which is precisely the list to go
@@ -382,11 +411,14 @@ arithmetic reusable everywhere and testable in CI.
    13 passing tests over the planted-defect budget
 2. ~~Save the analyzed opportunity per client~~ — **done**: the three-slot pipeline (§4c)
 3. ~~Skill version~~ — **done**: `grant-desk-intake`, composing with `grant-ready-binder`
-4. Read-only client view on the existing WordPress stack — and the FluentCRM join lands here (§4c)
-5. ~~Opportunity discovery~~ — **done**: Kindora live search on intake (§4b). Still open: retry
-   *Granted* once its search tool stops timing out, and add URL/PDF fetching in the skill version
+4. Connect Novamira over OAuth as a claude.ai connector (§4c) — it is the precondition for both
+   of the next two items
+5. FluentCRM clients read directly through Novamira, retiring the CSV import as the primary path
+6. Read-only client view on the existing WordPress stack, built in place through Novamira
+7. ~~Opportunity discovery~~ — **done**: Kindora live search on intake (§4b). Still open: retry
+   *Granted* once its search tool stops timing out, and add URL fetching in the skill version
    where no sandbox blocks it
-6. Client-operated analysis, only behind a real term of service
+8. Client-operated analysis, only behind a real term of service
 
 ---
 
