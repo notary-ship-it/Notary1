@@ -14,10 +14,14 @@ Published as **DMS Grant Desk**: https://claude.ai/artifact/Ptb7uEy4tdJXXkyFMgsi
 Eight tabs: Intake · Notice · Eligibility & runway · Rubric · What's needed · Document check ·
 Packet · Client.
 
-Intake takes a notice three ways: a live search of the Kindora grant database (one click loads a
-result), a pasted URL whose site and opportunity number are parsed out, or pasted notice text. A
-published page cannot download a website — the browser sandbox blocks it silently — so there is no
-fetch-from-URL button by design; see the spec's §4b.
+Intake takes a notice four ways: a dropped PDF (text extracted in the page), a live search of the
+Kindora grant database, a pasted URL whose site and opportunity number are parsed out, or pasted
+text. A published page cannot download a website — the browser sandbox blocks it silently — so
+there is no fetch-from-URL button by design; see the spec's §4b.
+
+Three grants can be kept in flight per client, each slot holding its notice, scores and gap list so
+work can be picked back up later. Clients come in live from HoneyBook, or from any CRM export as
+CSV (FluentCRM has no connector — see §4c).
 
 Two things it does that the Bid Desk does not:
 
@@ -32,6 +36,22 @@ doubles as the build sheet for that deliverable.
 
 Design notes, data model, known limits and the productization path (client packaging, the
 WordPress client view, the skill port) are in **[docs/grant-desk-spec.md](docs/grant-desk-spec.md)**.
+
+## Grant Desk Intake skill
+
+`.claude/skills/grant-desk-intake/` — the same work outside the browser, for when it starts from
+files on disk. Reads a notice PDF, extracts the record, and runs the deterministic budget and
+narrative checks as a Python port of the page's arithmetic layer.
+
+```bash
+python3 .claude/skills/grant-desk-intake/scripts/grant_checks.py budget BUDGET.csv \
+    --cap 10 --match 25 --ceiling 500000 --floor 150000
+python3 .claude/skills/grant-desk-intake/scripts/test_grant_checks.py   # 13 tests
+```
+
+Exit status is 1 when any finding is a blocker, so it drops into a pre-submission check. The tests
+run the example budget's three planted defects; if they fail, the script and the page have drifted
+apart and will disagree about the same spreadsheet.
 
 ### Editing it
 

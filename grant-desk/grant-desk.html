@@ -312,6 +312,26 @@ ul.marks.flags li::before { background: var(--flagink); }
 .rowedit .rowhead h4 { font-size: 15px; flex: 1; min-width: 0; }
 .fieldgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px; }
 
+/* ---------- pipeline slots ----------
+   Three slots, always all three visible so an empty one reads as
+   capacity rather than as something missing. */
+.slots { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; }
+.slot {
+  border: 1px solid var(--rule); border-radius: 3px; padding: 13px 14px; background: var(--surface);
+  display: flex; flex-direction: column; gap: 9px; min-height: 150px;
+}
+.slot.filled { border-left: 3px solid var(--navy); }
+.slot.empty { border-style: dashed; background: var(--sunk); justify-content: center; align-items: flex-start; }
+.slot.live { border-left-color: var(--gold-bright); box-shadow: var(--shadow); }
+.slot-n { font: 600 10px/1 "IBM Plex Mono", monospace; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3); }
+.slot h4 { font-size: 14.5px; }
+.slot .meta { font-size: 12px; color: var(--ink-2); display: flex; flex-direction: column; gap: 2px; }
+.slot .meta b { font-variant-numeric: tabular-nums; }
+.slot .scores { display: flex; gap: 14px; font-family: "IBM Plex Mono", monospace; font-size: 12px; font-variant-numeric: tabular-nums; color: var(--ink-2); }
+.slot .scores b { font-size: 15px; font-weight: 600; color: var(--ink); }
+.slot-foot { margin-top: auto; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.slot select { font-size: 12px; padding: 5px 7px; }
+
 /* ---------- source rows and search hits ---------- */
 .srcrow { display: grid; grid-template-columns: minmax(0,1.1fr) minmax(0,1.6fr) 110px minmax(0,1.4fr) auto; gap: 10px; align-items: center; padding: 9px 0; border-top: 1px solid var(--rule); }
 .srcrow:first-of-type { border-top: 0; }
@@ -375,6 +395,7 @@ ul.marks.flags li::before { background: var(--flagink); }
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.3.1/umd/react.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.3.1/umd/react-dom.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script>
 (function () {
 "use strict";
@@ -610,6 +631,7 @@ function parseSourceUrl(raw) {
    page says so rather than pretending otherwise.
    ================================================================== */
 var KINDORA_SERVER = "Kindora Funder Discovery";
+var HONEYBOOK_SERVER = "HoneyBook";
 var KINDORA_TOOL = "search_open_grants";
 
 /* One distinct fix per error code. A single generic banner would hide
@@ -878,6 +900,124 @@ function chunkText(text, size) {
   return out;
 }
 function clip(s, n) { s = String(s || ""); return s.length > n ? s.slice(0, n) + "\n…[trimmed]" : s; }
+
+/* ==================================================================
+   3b. READING FILES
+   PDF text comes out in the browser through pdf.js. A notice is
+   usually a text PDF and extracts cleanly; a scanned one yields
+   nothing, and the page says so rather than handing the analysis an
+   empty string. Neither library is guaranteed to load, so both are
+   feature-detected and both have an honest fallback.
+   ================================================================== */
+function pdfReady() { return !!(window.pdfjsLib && window.pdfjsLib.getDocument); }
+
+var pdfWorkerSet = false;
+function setPdfWorker() {
+  if (pdfWorkerSet || !pdfReady()) return;
+  try {
+    window.pdfjsLib.GlobalWorkerOptions.workerSrc =
+      "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+  } catch (e) { /* pdf.js falls back to the main thread */ }
+  pdfWorkerSet = true;
+}
+
+/* Resolves {text, pages, note}. Rejects only on a genuinely unreadable
+   file; an image-only PDF resolves with empty text and a note saying so. */
+function extractPdfText(file) {
+  return new Promise(function (resolve, reject) {
+    if (!pdfReady()) {
+      reject(new Error("The PDF reader did not load on this view. Open the PDF, select all, and paste the text instead."));
+      return;
+    }
+    setPdfWorker();
+    var fr = new FileReader();
+    fr.onerror = function () { reject(new Error("That file could not be read.")); };
+    fr.onload = function () {
+      var task;
+      try { task = window.pdfjsLib.getDocument({ data: new Uint8Array(fr.result) }); }
+      catch (e) { reject(new Error("That file could not be opened as a PDF.")); return; }
+      task.promise.then(function (pdf) {
+        var pages = pdf.numPages;
+        var jobs = [];
+        for (var i = 1; i <= pages; i++) {
+          jobs.push(pdf.getPage(i).then(function (page) {
+            return page.getTextContent().then(function (tc) {
+              /* Rebuild lines from item positions: pdf.js gives words, and
+                 a notice's numbered clauses are unreadable run together. */
+              var out = [], lastY = null;
+              asArr(tc.items).forEach(function (it) {
+                var str = it.str === undefined ? "" : String(it.str);
+                var y = it.transform && it.transform.length > 5 ? Math.round(it.transform[5]) : null;
+                if (lastY !== null && y !== null && Math.abs(y - lastY) > 2) out.push("\n");
+                else if (out.length && !/\s$/.test(out[out.length - 1]) && !/^\s/.test(str)) out.push(" ");
+                out.push(str);
+                if (y !== null) lastY = y;
+              });
+              return out.join("");
+            });
+          }));
+        }
+        Promise.all(jobs).then(function (texts) {
+          var text = texts.join("\n\n").replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
+          var words = text.split(/\s+/).filter(Boolean).length;
+          var note;
+          if (!text || words < 20) {
+            note = "Read " + pages + " page" + (pages === 1 ? "" : "s") + " but found almost no text (" + words +
+              " words). This is very likely a scanned PDF — the pages are images. Run it through OCR, or copy the text from the source posting.";
+          } else {
+            note = "Read " + words.toLocaleString() + " words from " + pages + " page" + (pages === 1 ? "" : "s") +
+              ". Check the start and end below before running it — extracted text sometimes loses tables and picks up headers.";
+          }
+          resolve({ text: text, pages: pages, words: words, note: note });
+        }, function () { reject(new Error("The PDF opened but its text could not be extracted. Try OCR, or paste the text.")); });
+      }, function (e) {
+        reject(new Error(e && /password/i.test(String(e && e.message)) ? "That PDF is password-protected. Remove the protection and try again."
+                                                                      : "That file could not be opened as a PDF."));
+      });
+    };
+    fr.readAsArrayBuffer(file);
+  });
+}
+
+/* One entry point for every file the desk accepts. */
+function readAnyFile(file) {
+  var name = file && file.name ? file.name : "";
+  if (/\.pdf$/i.test(name)) {
+    return extractPdfText(file).then(function (r) {
+      return { text: r.text, rows: [], note: r.note, kind: "pdf" };
+    });
+  }
+  if (/\.(xlsx|xlsm|xls)$/i.test(name)) {
+    return new Promise(function (resolve, reject) {
+      if (!window.XLSX) {
+        reject(new Error("The spreadsheet reader did not load on this view. Save the sheet as CSV and drop that in instead."));
+        return;
+      }
+      var fr = new FileReader();
+      fr.onerror = function () { reject(new Error("That file could not be read.")); };
+      fr.onload = function () {
+        try {
+          var wb = window.XLSX.read(new Uint8Array(fr.result), { type: "array" });
+          var sheet = wb.SheetNames[0];
+          var csv = window.XLSX.utils.sheet_to_csv(wb.Sheets[sheet]);
+          resolve({ text: csv, rows: parseDelimited(csv), kind: "sheet",
+            note: "Read sheet \"" + sheet + "\"" + (wb.SheetNames.length > 1 ? " — the workbook has " + wb.SheetNames.length + " sheets and only the first was read." : ".") });
+        } catch (e) { reject(new Error("That file could not be read. Save it as CSV and try again.")); }
+      };
+      fr.readAsArrayBuffer(file);
+    });
+  }
+  return new Promise(function (resolve, reject) {
+    var fr = new FileReader();
+    fr.onerror = function () { reject(new Error("That file could not be read.")); };
+    fr.onload = function () {
+      var text = String(fr.result || "");
+      resolve({ text: text, rows: /\.(csv|tsv)$/i.test(name) ? parseDelimited(text) : [], kind: "text",
+        note: "Read " + name + "." });
+    };
+    fr.readAsText(file);
+  });
+}
 
 var ERR_COPY = {
   not_granted: "Claude access was not granted for this page. Reload and allow it when prompted.",
@@ -1562,6 +1702,68 @@ function StatedCriteria(props) {
    8. TABS
    ================================================================== */
 
+var OPP_STATUSES = ["considering", "writing", "submitted", "awarded", "declined", "passed on it"];
+
+/* Three slots per client: the grants we are actually going after.
+   The index lives on the client record so this panel renders without
+   loading three full analyses; each slot's notice and assessment load
+   from their own document only when a slot is opened. */
+function PipelinePanel(props) {
+  var pipe = asArr(props.pipeline);
+  var slots = ["1", "2", "3"];
+  function entry(n) { return pipe.filter(function (x) { return String(x.slot) === n; })[0] || null; }
+  var used = pipe.length;
+
+  return h(Panel, { title: "Grants we're going after", note: used + " of 3 slots used" },
+    h("div.stack-sm", null,
+      h("p", { style: { margin: 0, color: "var(--ink-2)", maxWidth: "74ch" } },
+        "Three at a time per client, so the shortlist stays a shortlist. Saving keeps the notice, the scores and the gap list — open a slot later and the desk comes back exactly where you left it."),
+      h("div.slots", null, slots.map(function (n) {
+        var e = entry(n);
+        if (!e) {
+          return h("div", { key: n, className: "slot empty" },
+            h("span.slot-n", null, "Slot " + n),
+            h("p", { style: { margin: "6px 0 0", fontSize: "13px", color: "var(--ink-3)" } }, "Empty"),
+            props.canSave
+              ? h("button.btn.ghost.sm", { style: { marginTop: "10px" }, onClick: function () { props.onSave(n); } }, "Save the current grant here")
+              : h("p", { style: { margin: "8px 0 0", fontSize: "12px", color: "var(--ink-3)" } }, "Read and score a notice, then save it here."));
+        }
+        var dl = parseDate(e.deadline);
+        var days = dl ? daysUntil(dl) : null;
+        var isLive = props.liveKey && e.oppKey === props.liveKey;
+        return h("div", { key: n, className: "slot filled" + (isLive ? " live" : "") },
+          h("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: "8px" } },
+            h("span.slot-n", null, "Slot " + n),
+            isLive ? h(Pill, { kind: "warn" }, "Open") : null),
+          h("h4", null, txt(e.title) || "Untitled opportunity"),
+          h("div.meta", null,
+            h("span", null, txt(e.funder) || "Funder not recorded"),
+            dl ? h("span", null, "Due ", h("b", null, fmtDate(dl)),
+                   days !== null ? h("span", { style: { color: days < 0 ? "var(--fail)" : (days < 21 ? "var(--gold)" : "var(--ink-3)") } },
+                     " · " + (days < 0 ? Math.abs(days) + "d past" : days + "d left")) : null)
+               : h("span", { style: { color: "var(--ink-3)" } }, "No deadline recorded"),
+            txt(e.savedAt) ? h("span", { style: { color: "var(--ink-3)" } }, "Saved " + txt(e.savedAt).slice(0, 10)) : null),
+          h("div.scores", null,
+            h("span", null, "Score ", h("b", null, num(e.projectedScore) === null ? "—" : num(e.projectedScore)),
+              num(e.projectedMax) ? "/" + num(e.projectedMax) : ""),
+            h("span", null, "Ready ", h("b", null, num(e.readiness) === null ? "—" : num(e.readiness)), "/100")),
+          h("div.slot-foot", null,
+            h("select", { id: "slot-st-" + n, value: e.status || "considering",
+              onChange: function (ev) { props.onStatus(n, ev.target.value); } },
+              OPP_STATUSES.map(function (x) { return h("option", { key: x, value: x }, x); })),
+            h("button.btn.sm", { disabled: props.loadingSlot === n, onClick: function () { props.onLoad(n); } },
+              props.loadingSlot === n ? "Opening…" : "Open"),
+            props.canSave ? h("button.link", { onClick: function () { props.onSave(n); } }, "Overwrite") : null,
+            h("button.link", { onClick: function () { props.onClear(n); } }, "Clear")));
+      })),
+      props.pipeErr ? h("div.notice.bad", null, props.pipeErr) : null,
+      props.storageReady === false
+        ? h("div.notice", null, h("strong", null, "Storage is unavailable on this view. "),
+            "Slots will hold for this session but will not come back later.")
+        : null
+    ));
+}
+
 /* Saved sites a notice comes from. Not a fetcher — a record plus a way
    back to the site, because the page is blocked from downloading one. */
 function SourcesPanel(props) {
@@ -1697,6 +1899,12 @@ function IntakeTab(props) {
           ".")
       : null,
 
+    h(PipelinePanel, {
+      pipeline: props.pipeline, canSave: props.canSave, liveKey: props.liveKey,
+      loadingSlot: props.loadingSlot, pipeErr: props.pipeErr, storageReady: props.storageReady,
+      onSave: props.onSaveSlot, onLoad: props.onLoadSlot, onClear: props.onClearSlot, onStatus: props.onSlotStatus
+    }),
+
     props.mcpReady
       ? h(GrantSearch, {
           query: props.search, setQuery: props.setSearch, hits: props.hits,
@@ -1735,6 +1943,14 @@ function IntakeTab(props) {
 
     h(Panel, { title: "Notice text", note: chars ? chars.toLocaleString() + " characters · " + parts + (parts === 1 ? " pass" : " passes") : null },
       h("div.stack-sm", null,
+        h("div.filedrop", null,
+          h("p", null, "Drop the notice in as a PDF and its text is pulled out here in the page. Word-processor and text files work too; a scanned PDF will not, and the page will tell you so."),
+          h("input", { type: "file", id: "nofo-file", accept: ".pdf,.txt,.md,.rtf", disabled: running || props.reading,
+            onChange: props.onNoticeFile, style: { width: "auto" } }),
+          props.reading ? h("p", { className: "eyebrow", style: { marginTop: "10px" } }, "Reading the PDF…") : null),
+        isStr(props.fileNote)
+          ? h("div", { className: "notice" + (props.fileBad ? ".bad" : ".plain") }, props.fileNote)
+          : null,
         h("textarea", {
           id: "nofo-text", rows: 14, value: st.noticeText, disabled: running,
           placeholder: "Paste the full notice here — or load the example notice to see how the desk reads one.",
@@ -2229,36 +2445,12 @@ function CheckTab(props) {
   function onFile(e) {
     var f = e.target.files && e.target.files[0];
     if (!f) return;
-    var name = f.name || "";
-    set({ label: st.label || name });
-    if (/\.(xlsx|xlsm|xls)$/i.test(name)) {
-      if (!window.XLSX) {
-        set({ fileNote: "This view could not load the spreadsheet reader. Open the file, save it as CSV, and drop that in instead — or paste the cells below." });
-        return;
-      }
-      var fr = new FileReader();
-      fr.onload = function () {
-        try {
-          var wb = window.XLSX.read(new Uint8Array(fr.result), { type: "array" });
-          var sheetName = wb.SheetNames[0];
-          var csv = window.XLSX.utils.sheet_to_csv(wb.Sheets[sheetName]);
-          set({ content: csv, rows: parseDelimited(csv), computed: null, ai: null,
-                fileNote: "Read sheet \"" + sheetName + "\"" + (wb.SheetNames.length > 1 ? " — the workbook has " + wb.SheetNames.length + " sheets and only the first was read." : ".") });
-        } catch (err) {
-          set({ fileNote: "That file could not be read. Save it as CSV and try again." });
-        }
-      };
-      fr.onerror = function () { set({ fileNote: "That file could not be read." }); };
-      fr.readAsArrayBuffer(f);
-      return;
-    }
-    var tr = new FileReader();
-    tr.onload = function () {
-      var text = String(tr.result || "");
-      set({ content: text, rows: /\.(csv|tsv)$/i.test(name) ? parseDelimited(text) : [], computed: null, ai: null, fileNote: "Read " + name + "." });
-    };
-    tr.onerror = function () { set({ fileNote: "That file could not be read." }); };
-    tr.readAsText(f);
+    set({ label: st.label || f.name || "", fileNote: "Reading " + (f.name || "the file") + "…" });
+    readAnyFile(f).then(function (r) {
+      set({ content: r.text, rows: r.rows, computed: null, ai: null, fileNote: r.note });
+    }, function (err) {
+      set({ fileNote: (err && err.message) || "That file could not be read." });
+    });
   }
 
   var computed = st.computed;
@@ -2289,8 +2481,8 @@ function CheckTab(props) {
         h("div.filedrop", null,
           h("p", null, isSheet
             ? "Drop in the budget as .xlsx or .csv, or paste the cells below. Every amount is re-added here in the page."
-            : "Drop in a .txt, .md or .csv file, or paste the text below. A PDF has to be pasted as text."),
-          h("input", { type: "file", id: "ck-file", accept: ".csv,.tsv,.txt,.md,.xlsx,.xlsm,.xls", onChange: onFile, style: { width: "auto" } })
+            : "Drop in a PDF, .txt, .md or .csv file, or paste the text below. PDF text is extracted here in the page."),
+          h("input", { type: "file", id: "ck-file", accept: ".csv,.tsv,.txt,.md,.pdf,.xlsx,.xlsm,.xls", onChange: onFile, style: { width: "auto" } })
         ),
         isStr(st.fileNote) ? h("p", { className: "eyebrow", style: { color: "var(--ink-2)" } }, st.fileNote) : null,
         h("label.f", { htmlFor: "ck-content" }, isSheet ? "Or paste the budget (CSV or tab-separated, header row first)" : "Or paste the text",
@@ -2544,6 +2736,133 @@ function PacketTab(props) {
   );
 }
 
+/* Pull a column out of a CRM export by any of several header spellings. */
+function pickCol(header, names, exclude) {
+  var skip = asArr(exclude);
+  function taken(i) { return skip.indexOf(i) >= 0; }
+  for (var i = 0; i < header.length; i++) {
+    if (taken(i)) continue;
+    var hname = String(header[i] || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+    for (var j = 0; j < names.length; j++) if (hname === names[j]) return i;
+  }
+  /* Substring is the fallback, and it is why order matters: "name"
+     also occurs inside "first_name" and "company_name", so the columns
+     that matched exactly are excluded before we get here. */
+  for (var i2 = 0; i2 < header.length; i2++) {
+    if (taken(i2)) continue;
+    var h2 = String(header[i2] || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+    for (var j2 = 0; j2 < names.length; j2++) if (h2.indexOf(names[j2]) >= 0) return i2;
+  }
+  return -1;
+}
+
+/* A CRM export becomes candidate client records. Works for a FluentCRM
+   contact export and for any other CSV with recognisable headers. */
+function clientsFromCsv(text) {
+  var rows = parseDelimited(text);
+  if (rows.length < 2) return { rows: [], error: "That CSV has no data rows under its header." };
+  var hd = rows[0];
+  var cOrg = pickCol(hd, ["companyname", "company", "organization", "organisation", "orgname", "accountname"]);
+  var cFirst = pickCol(hd, ["firstname", "fname", "given"], [cOrg]);
+  var cLast = pickCol(hd, ["lastname", "lname", "surname", "family"], [cOrg, cFirst]);
+  var cFull = pickCol(hd, ["fullname", "name", "contactname"], [cOrg, cFirst, cLast]);
+  var cEmail = pickCol(hd, ["email", "emailaddress"]);
+  var cPhone = pickCol(hd, ["phone", "phonenumber", "mobile", "telephone"]);
+  var cAddr = pickCol(hd, ["address", "addressline1", "street", "mailingaddress"]);
+  var cCity = pickCol(hd, ["city", "town"]);
+  var cState = pickCol(hd, ["state", "region", "province"]);
+  var cZip = pickCol(hd, ["zip", "postcode", "postalcode"]);
+  var cWeb = pickCol(hd, ["website", "url", "websiteurl"]);
+  if (cOrg < 0 && cFull < 0 && cFirst < 0) {
+    return { rows: [], error: "No name column found. The export needs a company, organization, name, or first-name column. Headers seen: " + hd.slice(0, 8).join(", ") + "." };
+  }
+  var out = [];
+  for (var r = 1; r < rows.length; r++) {
+    var row = rows[r];
+    function at(i) { return i >= 0 && isStr(row[i]) ? row[i].trim() : ""; }
+    var org = at(cOrg);
+    var person = at(cFull) || [at(cFirst), at(cLast)].filter(Boolean).join(" ");
+    var name = org || person;
+    if (!isStr(name)) continue;
+    var addr = [at(cAddr), at(cCity), [at(cState), at(cZip)].filter(Boolean).join(" ")].filter(Boolean).join(", ");
+    out.push({ name: name, contact: org && person ? person : "", email: at(cEmail), phone: at(cPhone),
+               address: addr, website: at(cWeb) });
+  }
+  if (!out.length) return { rows: [], error: "No rows in that CSV had a usable name." };
+  return { rows: out, error: null };
+}
+
+/* Bring a client in from the CRM. HoneyBook runs live through the
+   viewer's connector; anything else comes in as a CSV export, because
+   no other CRM here has a connector to call. */
+function ClientImport(props) {
+  var st = props.state, set = props.set;
+  var hits = asArr(st.hbHits);
+  var csv = st.csvParsed;
+
+  return h(Panel, { title: "Bring a client in", note: "HoneyBook live · any CRM by CSV" },
+    h("div.stack-sm", null,
+      props.hbReady
+        ? h("div.stack-sm", null,
+            h("div", { style: { display: "flex", gap: "10px", flexWrap: "wrap", alignItems: "center" } },
+              h("button.btn", { disabled: st.hbLoading, onClick: props.onLoadHoneyBook },
+                st.hbLoading ? "Loading…" : "Load my HoneyBook client organizations"),
+              h("span", { className: "eyebrow", style: { color: "var(--ink-3)" } }, "Runs on your own connector")),
+            st.hbErr ? h("div", { className: "notice" + (st.hbErr.retry ? "" : ".bad") }, st.hbErr.text) : null,
+            st.hbLoaded && !hits.length && !st.hbErr
+              ? h("p.null", null, "No client organizations came back. In HoneyBook a grant client has to exist as an organization, not only as a contact.")
+              : null,
+            hits.length
+              ? h("div.tablewrap", null,
+                  h("table.grid", null,
+                    h("thead", null, h("tr", null, h("th", null, "Organization"), h("th", null, "Type"), h("th", null, "Contact"), h("th", null, ""))),
+                    h("tbody", null, hits.map(function (o, i) {
+                      var already = props.existing.some(function (c) {
+                        return isStr(c.honeybookId) ? c.honeybookId === o.id
+                          : (txt(c.legalName) || "").toLowerCase() === String(o.name || "").toLowerCase();
+                      });
+                      return h("tr", { key: i },
+                        h("td", null, txt(o.name) || "(unnamed)"),
+                        h("td", { style: { color: "var(--ink-2)" } }, txt(o.company_type) || h("span.null", null, "—")),
+                        h("td", { style: { color: "var(--ink-2)" } },
+                          [txt(o.phone_number), txt(o.website_url)].filter(Boolean).join(" · ") || h("span.null", null, "—")),
+                        h("td", null, already
+                          ? h(Pill, { kind: "ok" }, "Already here")
+                          : h("button.btn.sm", { onClick: function () { props.onUseHoneyBook(o); } }, "Add as client")));
+                    }))))
+              : null)
+        : h("div.notice.plain", null,
+            h("strong", null, "HoneyBook is not connected on this view. "),
+            "Add it in claude.ai Settings \u2192 Connectors to pull client organizations in directly, or use the CSV import below."),
+
+      h("div", { style: { borderTop: "1px solid var(--rule)", paddingTop: "14px", marginTop: "4px" } },
+        h("p", { className: "eyebrow", style: { marginBottom: "8px" } }, "From a CRM export"),
+        h("p", { style: { margin: "0 0 10px", color: "var(--ink-2)", maxWidth: "74ch", fontSize: "13px" } },
+          "FluentCRM has no connector to call, so its clients come in as an export: in FluentCRM go to Contacts, filter to the list you want, and export as CSV. Any CSV with a company, organization or name column works the same way."),
+        h("input", { type: "file", id: "crm-file", accept: ".csv,.tsv", onChange: props.onCsvFile, style: { width: "auto" } }),
+        isStr(st.csvNote) ? h("p", { className: "eyebrow", style: { color: "var(--ink-2)", marginTop: "8px" } }, st.csvNote) : null,
+        csv && asArr(csv.rows).length
+          ? h("div.stack-sm", { style: { marginTop: "12px" } },
+              h("div.tablewrap", { style: { maxHeight: "260px", overflow: "auto" } },
+                h("table.grid", null,
+                  h("thead", null, h("tr", null, h("th", null, "Name"), h("th", null, "Email"), h("th", null, "Phone"), h("th", null, ""))),
+                  h("tbody", null, asArr(csv.rows).map(function (o, i) {
+                    var already = props.existing.some(function (c) { return (txt(c.legalName) || "").toLowerCase() === o.name.toLowerCase(); });
+                    return h("tr", { key: i },
+                      h("td", null, o.name),
+                      h("td", { style: { color: "var(--ink-2)" } }, o.email || h("span.null", null, "—")),
+                      h("td", { style: { color: "var(--ink-2)" } }, o.phone || h("span.null", null, "—")),
+                      h("td", null, already ? h(Pill, { kind: "ok" }, "Already here")
+                                            : h("button.btn.sm", { onClick: function () { props.onUseCsv(o); } }, "Add")));
+                  })))))
+          : null),
+
+      h("div.notice.plain", null,
+        h("strong", null, "What an import does and does not bring. "),
+        "A CRM knows who the client is \u2014 name, contact, address. It does not know their EIN, UEI, SAM status or which documents are on file, because a CRM never held those. Everything an import cannot fill arrives as Pending, which is exactly the list to go and ask the client for.")
+    ));
+}
+
 /* ---------- 8. Client record ---------- */
 function ClientTab(props) {
   var c = props.client;
@@ -2588,6 +2907,12 @@ function ClientTab(props) {
           : h("p", { className: "eyebrow", style: { color: "var(--work)" } },
               "Storage is unavailable on this view — edits stay on screen for this session only."))
     ),
+
+    h(ClientImport, {
+      state: props.importState, set: props.setImportState, existing: props.clients,
+      hbReady: props.hbReady, onLoadHoneyBook: props.onLoadHoneyBook, onUseHoneyBook: props.onUseHoneyBook,
+      onCsvFile: props.onCsvFile, onUseCsv: props.onUseCsv
+    }),
 
     h(Panel, { title: "Organization" },
       h("div.fieldgrid", null,
@@ -2729,6 +3054,14 @@ function App() {
   var sL = useState(false), searching = sL[0], setSearching = sL[1];
   var sM = useState(false), searched = sM[0], setSearched = sM[1];
   var sN = useState(null), searchErr = sN[0], setSearchErr = sN[1];
+  var sO = useState(null), liveKey = sO[0], setLiveKey = sO[1];
+  var sP = useState(null), loadingSlot = sP[0], setLoadingSlot = sP[1];
+  var sQ = useState(null), pipeErr = sQ[0], setPipeErr = sQ[1];
+  var sR = useState(false), noticeReading = sR[0], setNoticeReading = sR[1];
+  var sS = useState({ note: "", bad: false }), noticeFile = sS[0], setNoticeFile = sS[1];
+  var sT = useState({ hbHits: [], hbLoading: false, hbLoaded: false, hbErr: null,
+                      csvParsed: null, csvNote: "" }), importState = sT[0], setImportStateRaw = sT[1];
+  var sU = useState({ kindora: false, honeybook: false }), servers = sU[0], setServers = sU[1];
 
   var sampleRef = useRef(null);
   var dbRef = useRef(null);
@@ -2764,11 +3097,17 @@ function App() {
       if (!live) return;
       mcpRef.current = m;
       if (!m) { setMcpReady(false); return; }
-      m.listTools(KINDORA_SERVER).then(function (res) {
+      m.listTools().then(function (res) {
         if (!live) return;
-        var servers = asArr(res && res.servers);
-        setMcpReady(servers.length > 0);
-      }, function () { if (live) setMcpReady(true); });
+        var names = asArr(res && res.servers).map(function (x) { return String(x.server || ""); });
+        var hasK = names.indexOf(KINDORA_SERVER) >= 0;
+        var hasH = names.indexOf(HONEYBOOK_SERVER) >= 0;
+        setServers({ kindora: hasK, honeybook: hasH });
+        setMcpReady(hasK);
+      }, function () {
+        /* Listing failed; the calls themselves still report per-code. */
+        if (live) { setMcpReady(true); setServers({ kindora: true, honeybook: true }); }
+      });
     }, function () { if (live) setMcpReady(false); });
 
     window.claude.use("db").then(function (db) {
@@ -2828,15 +3167,194 @@ function App() {
   function addSource(src) { setSourcesRaw(sources.concat([src])); touch(); }
   function setSearch(patch) { setSearchRaw(Object.assign({}, search, patch)); }
 
-  function saveAll() {
+  function saveAll(overrideClients) {
     var db = dbRef.current;
     if (!db) return;
+    var items = Array.isArray(overrideClients) ? overrideClients : clients;
     setSaving(true);
     Promise.all([
-      db.doc("grantdesk/clients").set({ items: clients, activeId: activeId, savedAt: new Date().toISOString() }),
+      db.doc("grantdesk/clients").set({ items: items, activeId: activeId, savedAt: new Date().toISOString() }),
       db.doc("grantdesk/sources").set({ items: sources })
     ]).then(function () { setSaving(false); setDirty(false); },
             function () { setSaving(false); setError("Could not save. Your edits are still on screen."); });
+  }
+
+  function setImportState(patch) { setImportStateRaw(Object.assign({}, importState, patch)); }
+
+  var pipeline = asArr(client.pipeline);
+
+  /* --- the three slots ---------------------------------------------
+     The index rides on the client record; each slot's full notice and
+     assessment live in their own document so saving one slot never
+     rewrites the others. */
+  function oppKeyFor(slot) { return String(client.id || "client") + "__" + slot; }
+
+  function saveSlot(slot) {
+    if (!brief) return;
+    setPipeErr(null);
+    var key = oppKeyFor(slot);
+    var entry = {
+      slot: String(slot), oppKey: key,
+      title: txt(brief.title) || txt(brief.opportunityNumber) || txt(intake.funder) || "Untitled opportunity",
+      funder: txt(brief.funder) || txt(intake.funder) || "",
+      deadline: txt((brief.dates || {}).applicationDeadline) || "",
+      status: (pipeline.filter(function (x) { return String(x.slot) === String(slot); })[0] || {}).status || "considering",
+      savedAt: new Date().toISOString(),
+      projectedScore: assess ? (num(assess.projectedScore) === null
+        ? asArr(assess.rubricScoring).reduce(function (t, r) { return t + (num(r.supportedPoints) || 0); }, 0)
+        : num(assess.projectedScore)) : null,
+      projectedMax: assess ? (num(assess.projectedMax) || asArr(assess.rubricScoring).reduce(function (t, r) { return t + (num(r.maxPoints) || 0); }, 0)) : null,
+      readiness: assess ? num(assess.readinessTotal) : null
+    };
+    var next = pipeline.filter(function (x) { return String(x.slot) !== String(slot); }).concat([entry]);
+    next.sort(function (a, b) { return String(a.slot).localeCompare(String(b.slot)); });
+    var updatedClients = clients.slice();
+    updatedClients[idx] = Object.assign({}, client, { pipeline: next });
+    setClients(updatedClients); touch();
+    setLiveKey(key);
+
+    var db = dbRef.current;
+    if (!db) { setPipeErr("Saved on screen only — storage is unavailable on this view."); return; }
+    db.doc("opportunities/" + key).set({
+      clientId: client.id, slot: String(slot), intake: intake, brief: brief, assess: assess,
+      savedAt: entry.savedAt
+    }).then(function () { saveAll(updatedClients); }, function () {
+      setPipeErr("The notice and scores could not be stored. The slot is on screen but will not come back later.");
+    });
+  }
+
+  function loadSlot(slot) {
+    var entry = pipeline.filter(function (x) { return String(x.slot) === String(slot); })[0];
+    if (!entry) return;
+    var db = dbRef.current;
+    if (!db) { setPipeErr("Storage is unavailable on this view, so saved slots cannot be reopened."); return; }
+    setLoadingSlot(String(slot)); setPipeErr(null);
+    db.doc("opportunities/" + entry.oppKey).get().then(function (snap) {
+      setLoadingSlot(null);
+      if (!snap || !snap.exists) { setPipeErr("That slot's record is missing. Re-run the notice and save it again."); return; }
+      var d = snap.data() || {};
+      if (d.intake) setIntake(Object.assign({ noticeText: "", funder: "", portal: "", sourceUrl: "", foundVia: "" }, d.intake));
+      setBrief(d.brief || null);
+      setAssess(d.assess || null);
+      setLiveKey(entry.oppKey);
+      setError(null);
+      setTab(d.assess ? "gates" : (d.brief ? "notice" : "intake"));
+    }, function () {
+      setLoadingSlot(null);
+      setPipeErr("That slot could not be read. Try again in a moment.");
+    });
+  }
+
+  function clearSlot(slot) {
+    var entry = pipeline.filter(function (x) { return String(x.slot) === String(slot); })[0];
+    var next = pipeline.filter(function (x) { return String(x.slot) !== String(slot); });
+    setClient(Object.assign({}, client, { pipeline: next }));
+    if (entry && liveKey === entry.oppKey) setLiveKey(null);
+    var db = dbRef.current;
+    if (db && entry) db.doc("opportunities/" + entry.oppKey).delete().catch(function () {});
+  }
+
+  function slotStatus(slot, status) {
+    var next = pipeline.map(function (x) { return String(x.slot) === String(slot) ? Object.assign({}, x, { status: status }) : x; });
+    setClient(Object.assign({}, client, { pipeline: next }));
+  }
+
+  /* --- reading a notice file --------------------------------------- */
+  function onNoticeFile(e) {
+    var f = e.target.files && e.target.files[0];
+    if (!f) return;
+    setNoticeReading(true);
+    setNoticeFile({ note: "Reading " + (f.name || "the file") + "…", bad: false });
+    readAnyFile(f).then(function (r) {
+      setNoticeReading(false);
+      var thin = !isStr(r.text) || r.text.split(/\s+/).filter(Boolean).length < 20;
+      setNoticeFile({ note: r.note, bad: thin });
+      if (!thin) {
+        setIntake(Object.assign({}, intake, { noticeText: r.text, foundVia: intake.foundVia || (f.name || "") }));
+      }
+    }, function (err) {
+      setNoticeReading(false);
+      setNoticeFile({ note: (err && err.message) || "That file could not be read.", bad: true });
+    });
+  }
+
+  /* --- bringing a client in ----------------------------------------- */
+  function loadHoneyBook() {
+    var m = mcpRef.current;
+    if (!m) return;
+    setImportState({ hbLoading: true, hbErr: null });
+    var code = [
+      "import { ClientOrganizationsAdapter } from '@honeybook/sdk/clientOrganizations';",
+      "const a = new ClientOrganizationsAdapter(httpClient);",
+      "const page = await a.listClientOrganizations({ params: { per_page: 50 } });",
+      "console.log(JSON.stringify(page.data.map(o => ({ id: o.id, name: o.name, company_type: o.company_type,",
+      "  website_url: o.website_url, phone_number: o.phone_number, address: o.address, private_notes: o.private_notes }))));"
+    ].join("\n");
+    m.callTool(HONEYBOOK_SERVER, "take_action_read_only", {
+      code: code,
+      intent: "List client organizations to import into the Grant Desk",
+      sdkVersion: "0.11.1"
+    }, { cache: { staleTime: 60000, gcTime: 600000 } }).then(function (res) {
+      var payload = res && res.payload;
+      if (payload && typeof payload === "object" && !Array.isArray(payload)) {
+        payload = payload.output !== undefined ? payload.output
+                : (payload.result !== undefined ? payload.result
+                : (payload.logs !== undefined ? payload.logs : payload));
+      }
+      if (typeof payload === "string") { try { payload = JSON.parse(payload); } catch (e) { payload = null; } }
+      if (Array.isArray(payload) && Array.isArray(payload[0])) payload = payload[0];
+      var rows = asArr(payload);
+      setImportStateRaw(Object.assign({}, importState, { hbLoading: false, hbLoaded: true, hbHits: rows, hbErr: null }));
+    }, function (e) {
+      setImportStateRaw(Object.assign({}, importState, { hbLoading: false, hbLoaded: true, hbErr: mcpErrCopy(e) }));
+    });
+  }
+
+  function addClientFrom(fields) {
+    var id = "c" + Math.random().toString(36).slice(2, 9);
+    var c = Object.assign({}, BLANK_CLIENT, fields, { id: id, docs: freshDocs(), regDone: {}, pipeline: [] });
+    setClients(clients.concat([c]));
+    setActiveId(id);
+    setDirty(true);
+  }
+
+  function useHoneyBook(o) {
+    addClientFrom({
+      legalName: txt(o.name) || "",
+      honeybookId: txt(o.id) || "",
+      orgType: txt(o.company_type) || P,
+      website: txt(o.website_url) || P,
+      phone: txt(o.phone_number) || P,
+      physicalAddress: txt(o.address) || P,
+      notes: [txt(o.private_notes), "Imported from HoneyBook."].filter(Boolean).join(" ")
+    });
+  }
+
+  function useCsv(o) {
+    addClientFrom({
+      legalName: o.name || "",
+      email: isStr(o.email) ? o.email : P,
+      phone: isStr(o.phone) ? o.phone : P,
+      physicalAddress: isStr(o.address) ? o.address : P,
+      website: isStr(o.website) ? o.website : P,
+      authorizedOfficial: isStr(o.contact) ? o.contact : P,
+      notes: "Imported from a CRM export."
+    });
+  }
+
+  function onCsvFile(e) {
+    var f = e.target.files && e.target.files[0];
+    if (!f) return;
+    setImportState({ csvNote: "Reading " + (f.name || "the file") + "…" });
+    readAnyFile(f).then(function (r) {
+      var parsed = clientsFromCsv(r.text);
+      setImportStateRaw(Object.assign({}, importState, {
+        csvParsed: parsed,
+        csvNote: parsed.error ? parsed.error : "Found " + parsed.rows.length + " row" + (parsed.rows.length === 1 ? "" : "s") + " in " + (f.name || "the file") + ". Add the ones you want."
+      }));
+    }, function (err) {
+      setImportState({ csvNote: (err && err.message) || "That file could not be read." });
+    });
   }
 
   /* One search, on a click. callTool rather than watchTool: the input
@@ -3033,9 +3551,12 @@ function App() {
       onAnalyze: analyze, onStop: stop, go: setTab,
       sources: sources, setSources: setSources, addSource: addSource,
       storageReady: storageReady, dirty: dirty, saving: saving, onSave: saveAll,
-      mcpReady: mcpReady, search: search, setSearch: setSearch, hits: hits,
+      mcpReady: mcpReady && servers.kindora, search: search, setSearch: setSearch, hits: hits,
       searching: searching, searched: searched, searchErr: searchErr,
-      onSearch: runSearch, onUseHit: useHit
+      onSearch: runSearch, onUseHit: useHit,
+      pipeline: pipeline, canSave: !!brief, liveKey: liveKey, loadingSlot: loadingSlot, pipeErr: pipeErr,
+      onSaveSlot: saveSlot, onLoadSlot: loadSlot, onClearSlot: clearSlot, onSlotStatus: slotStatus,
+      onNoticeFile: onNoticeFile, reading: noticeReading, fileNote: noticeFile.note, fileBad: noticeFile.bad
     });
   } else if (tab === "notice") {
     body = brief ? h(NoticeTab, { brief: brief, intake: intake })
@@ -3065,7 +3586,11 @@ function App() {
       client: client, setClient: setClient, docs: docs, setDocs: setDocs,
       clients: clients, pickClient: function (id) { setActiveId(id); },
       addClient: addClient, removeClient: removeClient,
-      storageReady: storageReady, dirty: dirty, saving: saving, onSave: saveAll
+      storageReady: storageReady, dirty: dirty, saving: saving, onSave: saveAll,
+      importState: importState, setImportState: setImportState,
+      hbReady: !!(mcpReady && servers.honeybook),
+      onLoadHoneyBook: loadHoneyBook, onUseHoneyBook: useHoneyBook,
+      onCsvFile: onCsvFile, onUseCsv: useCsv
     });
   }
 

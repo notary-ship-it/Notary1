@@ -200,22 +200,71 @@ tab, and the site can be saved to the sites list in one click.
 `grantdesk/sources` — name, URL, kind, and what each is good for. One click back to the site,
 because the last step is always a human copy-paste.
 
-**If you want true URL-to-text**, it does not belong in the page — it belongs in the skill version
-(§7), where a script can fetch and parse a URL or a PDF with no sandbox in the way. That is a
-second argument for building the skill port.
+**PDF is now handled in the page** (§4c). True URL-to-*text* still is not, and still belongs in the
+skill version (§7), where a script can fetch a URL with no sandbox in the way.
 
-### Connector trade-off worth knowing
+### Connector trade-off, now settled
 
 Declaring `mcp` means **this artifact can no longer be shared publicly** — a connector grant is
-viewer-consented and bars public sharing. That is acceptable here because the client-facing
-surface is WordPress (§7), not this artifact, and this page is the internal DMS tool. If a public
-link ever matters more than live search, dropping the `mcp` declaration restores it and the search
-block simply hides itself.
+viewer-consented and bars public sharing. This was a trade-off; it is now simply the right call.
+The desk is explicitly an in-house back office: DMS runs the applications and hands finished
+packets to clients, and a client-facing surface comes later, on WordPress, once the tool has been
+tweaked into shape. Nothing about the page needs to be shareable for that.
 
 Every failure mode gets its own copy and its own fix, per the capability's failure doctrine —
 connector not added, needs reconnecting, duplicate connectors unchosen, blocked by org policy,
 declined for this page, upstream timeout. A single "something went wrong" banner is the named
 anti-pattern, because it hides the one action that would repair the page.
+
+## 4c. PDF, the pipeline, and the CRM
+
+Three additions that turn the desk from an analyzer into the back office DMS runs grants from.
+
+### PDF reading, in the page
+
+Notices arrive as PDFs. `pdf.js` runs client-side, so unlike fetching a URL this one *is* possible
+inside the sandbox: drop a PDF on intake or on the document checker and its text is extracted here,
+with line breaks rebuilt from glyph positions so numbered clauses (`5.3`, `IV.7(k)`) survive —
+run together, a rubric is unreadable and extraction is worthless.
+
+A scanned PDF yields nothing, and the page says so rather than handing the analysis an empty
+string: under 20 words across the document is reported as "very likely a scanned PDF", with OCR as
+the fix. Both `pdf.js` and SheetJS are feature-detected, because neither CDN load is guaranteed.
+
+### The three-grant pipeline
+
+Three slots per client — a shortlist that stays a shortlist. Storage is split deliberately:
+
+- the **index** rides on the client record (`title`, `funder`, `deadline`, `status`, both scores),
+  so the panel renders three slots without loading three full analyses;
+- each slot's **payload** is its own document, `opportunities/<clientId>__<slot>`, holding the
+  intake metadata, the notice record and the assessment. Saving one slot never rewrites another,
+  and opening one is a single small read.
+
+Status runs considering → writing → submitted → awarded / declined / passed on it. Opening a slot
+restores intake, notice and assessment and jumps to the furthest tab that has data.
+
+### CRM import
+
+**HoneyBook works live.** `listClientOrganizations` is the right source because a grant client is
+an *organization*, not a contact, and it returns name, type, website, phone, address and private
+notes. It runs through `take_action_read_only` on the viewer's own connector.
+
+**FluentCRM has no path from the page, and will not get one.** It is not a claude.ai connector and
+it is not in Zapier's catalog at all (searched: zero results). Its REST API lives on the WordPress
+site, which the sandbox cannot reach for the same reason it cannot fetch a notice URL. So:
+
+- **now** — FluentCRM contacts come in as a CSV export. The importer resolves company /
+  organization / name / first+last columns by header, in that precedence, and falls back to
+  substring matching *only after* the exactly-matched columns are excluded (without that, `name`
+  matches `first_name` and the import silently drops every surname — caught by a test).
+- **properly, later** — FluentCRM *is* WordPress. The client-view page in §7 runs on the same
+  install, so the join needs no HTTP at all: a WP endpoint reads FluentCRM's tables directly.
+  That is the real integration, and it lands with the WordPress work rather than before it.
+
+Either way, an import brings what a CRM knows — who the client is — and nothing it never held. EIN,
+UEI, SAM status and the document registry all arrive `PENDING`, which is precisely the list to go
+and ask the client for.
 
 ## 5. Data model
 
@@ -245,10 +294,10 @@ order for the existing product.
 
 ## 6. Known limits — read before selling this
 
-1. **Not multi-tenant.** All client records live in one document under the artifact owner's
-   account. That is correct for DMS staff using it internally. It is **not** safe for a
-   client-facing version where two clients must not see each other's records. Per-client
-   isolation is the first thing to build before any external access — see §7.
+1. **Not multi-tenant, by current intent.** All client records live in one document under the
+   artifact owner's account. That is correct for the in-house back office this now is. It remains
+   **unsafe** for any client-facing version where two clients must not see each other's records —
+   so per-client isolation is a precondition of external access, not a later polish. See §7.
 2. **The model passes are not deterministic.** Two runs on the same notice can differ at the
    margins. The deterministic layer is the stable part; the rubric self-score is an assessment,
    not a measurement. Caching makes a single session consistent, not two sessions identical.
@@ -257,10 +306,12 @@ order for the existing product.
    be claimed to be.
 4. **Extraction quality tracks input quality.** A clean NOFO extracts well. A scanned PDF pasted
    as broken text extracts badly, and the desk will not know it did.
-5. **First sheet only** on a workbook, and no PDF parsing.
-6. **No URL fetching**, ever, in the page — see §4b. The live database search and the URL parser
-   are what stand in for it.
-7. **Nothing is filed anywhere.** The desk assesses; a human submits.
+5. **First sheet only** on a workbook in the page. The skill reads every sheet — use it when the
+   match detail hides on sheet two.
+6. **Scanned PDFs need OCR.** Text PDFs extract in the page; image-only ones are detected and
+   refused rather than analyzed as an empty string.
+7. **No URL fetching**, ever, in the page — see §4b.
+8. **Nothing is filed anywhere.** The desk assesses; a human submits.
 
 ---
 
@@ -327,11 +378,11 @@ arithmetic reusable everywhere and testable in CI.
 
 ### Sequenced roadmap
 
-1. Port Layer 0 to Python with the example budget as a regression test *(makes the asset portable)*
-2. Save the analyzed opportunity per client, so a client accumulates a history rather than one
-   live assessment
-3. Skill version, composing with `grant-ready-binder`
-4. Read-only client view on the existing WordPress stack
+1. ~~Port Layer 0 to Python~~ — **done**: `.claude/skills/grant-desk-intake/scripts/grant_checks.py`,
+   13 passing tests over the planted-defect budget
+2. ~~Save the analyzed opportunity per client~~ — **done**: the three-slot pipeline (§4c)
+3. ~~Skill version~~ — **done**: `grant-desk-intake`, composing with `grant-ready-binder`
+4. Read-only client view on the existing WordPress stack — and the FluentCRM join lands here (§4c)
 5. ~~Opportunity discovery~~ — **done**: Kindora live search on intake (§4b). Still open: retry
    *Granted* once its search tool stops timing out, and add URL/PDF fetching in the skill version
    where no sandbox blocks it
