@@ -14,6 +14,11 @@ Published as **DMS Grant Desk**: https://claude.ai/artifact/Ptb7uEy4tdJXXkyFMgsi
 Eight tabs: Intake · Notice · Eligibility & runway · Rubric · What's needed · Document check ·
 Packet · Client.
 
+Intake takes a notice three ways: a live search of the Kindora grant database (one click loads a
+result), a pasted URL whose site and opportunity number are parsed out, or pasted notice text. A
+published page cannot download a website — the browser sandbox blocks it silently — so there is no
+fetch-from-URL button by design; see the spec's §4b.
+
 Two things it does that the Bid Desk does not:
 
 - **Adopts the funder's rubric as data** rather than scoring on fixed weights, and reports points
@@ -31,5 +36,7 @@ WordPress client view, the skill port) are in **[docs/grant-desk-spec.md](docs/g
 ### Editing it
 
 The HTML file is the source of truth. Republish with the Artifact tool using the same file path to
-keep the same URL. The page declares three runtime capabilities: `sample` (the analysis passes),
-`db` (client records at `grantdesk/clients`), and `downloads` (the readiness memo export).
+keep the same URL. The page declares four runtime capabilities: `sample` (the analysis passes), `db` (client records
+at `grantdesk/clients`, saved sites at `grantdesk/sources`), `downloads` (the readiness memo
+export), and `mcp` (the Kindora grant search). Declaring `mcp` bars public sharing of the
+artifact — intentional, since the client-facing surface is WordPress rather than this page.

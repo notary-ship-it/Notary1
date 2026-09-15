@@ -312,6 +312,22 @@ ul.marks.flags li::before { background: var(--flagink); }
 .rowedit .rowhead h4 { font-size: 15px; flex: 1; min-width: 0; }
 .fieldgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px; }
 
+/* ---------- source rows and search hits ---------- */
+.srcrow { display: grid; grid-template-columns: minmax(0,1.1fr) minmax(0,1.6fr) 110px minmax(0,1.4fr) auto; gap: 10px; align-items: center; padding: 9px 0; border-top: 1px solid var(--rule); }
+.srcrow:first-of-type { border-top: 0; }
+.srcrow a { font-size: 12.5px; word-break: break-all; }
+@media (max-width: 860px) { .srcrow { grid-template-columns: 1fr; gap: 6px; } }
+
+.hits { display: flex; flex-direction: column; gap: 12px; }
+.hit { border: 1px solid var(--rule); border-left: 3px solid var(--navy); border-radius: 2px; padding: 13px 15px; background: var(--surface); display: flex; flex-direction: column; gap: 8px; }
+.hit.soon { border-left-color: var(--gold-bright); }
+.hit-top { display: flex; gap: 10px 14px; flex-wrap: wrap; align-items: baseline; }
+.hit-top h4 { font-size: 15px; flex: 1; min-width: 200px; }
+.hit-meta { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12.5px; color: var(--ink-2); }
+.hit-meta b { font-weight: 600; color: var(--ink); font-variant-numeric: tabular-nums; }
+.hit p.desc { margin: 0; font-size: 13px; color: var(--ink-2); max-width: 78ch; }
+.hit-foot { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+
 /* ---------- check findings ----------
    Arithmetic and judgment are visually separate on purpose: one is
    computed in the page, the other is Claude's reading. */
@@ -521,6 +537,145 @@ var REG_CHAIN = [
   { key: "workspace", label: "Workspace created, forms downloaded",      days: 1,  why: "Confirms the forms and attachment slots you actually have to fill." },
   { key: "validate",  label: "Submitted early enough to clear validation", days: 3, why: "Grants.gov validation can reject a package; you need time to fix and resubmit." }
 ];
+
+/* ==================================================================
+   2b. SOURCES — the sites a notice came from
+   The page cannot download a web page: a published artifact is blocked
+   from fetching other hosts, silently. So a source is a record (where
+   it came from, what its number is) plus a one-click way back to the
+   site, and the live database search below is how a notice gets loaded
+   without retyping it.
+   ================================================================== */
+var DEFAULT_SOURCES = [
+  { name: "Grants.gov", url: "https://www.grants.gov", kind: "Federal", note: "Every federal opportunity. The opportunity number is in the URL." },
+  { name: "SAM.gov", url: "https://sam.gov", kind: "Registration", note: "Entity registration and UEI — not opportunities." },
+  { name: "Candid / Foundation Directory", url: "https://candid.org", kind: "Foundation", note: "Foundation profiles and 990s." },
+  { name: "GrantWatch", url: "https://www.grantwatch.com", kind: "Mixed", note: "Aggregator, subscription." },
+  { name: "Kindora", url: "https://www.kindora.co", kind: "Foundation", note: "Backs the live search below." }
+];
+
+var SOURCE_KINDS = ["Federal", "State", "Foundation", "Mixed", "Registration", "Other"];
+
+/* Hostnames worth naming on sight. */
+var KNOWN_SITES = [
+  { re: /(^|\.)grants\.gov$/i,        label: "Grants.gov", kind: "Federal" },
+  { re: /(^|\.)sam\.gov$/i,           label: "SAM.gov", kind: "Registration" },
+  { re: /(^|\.)grantwatch\.com$/i,    label: "GrantWatch", kind: "Mixed" },
+  { re: /(^|\.)instrumentl\.com$/i,   label: "Instrumentl", kind: "Mixed" },
+  { re: /(^|\.)candid\.org$/i,        label: "Candid", kind: "Foundation" },
+  { re: /(^|\.)kindora\.co$/i,        label: "Kindora", kind: "Foundation" },
+  { re: /(^|\.)grantstation\.com$/i,  label: "GrantStation", kind: "Mixed" },
+  { re: /(^|\.)delaware\.gov$/i,      label: "State of Delaware", kind: "State" },
+  { re: /(^|\.)nih\.gov$/i,           label: "NIH", kind: "Federal" },
+  { re: /(^|\.)hhs\.gov$/i,           label: "HHS", kind: "Federal" },
+  { re: /(^|\.)ed\.gov$/i,            label: "US Dept. of Education", kind: "Federal" },
+  { re: /(^|\.)epa\.gov$/i,           label: "EPA", kind: "Federal" },
+  { re: /(^|\.)grantinterface\.com$/i,label: "Foundant (funder portal)", kind: "Foundation" }
+];
+
+/* Pull what a URL can actually tell us: the site, and the opportunity's
+   own number where the URL carries it. A Grants.gov detail URL carries a
+   numeric oppId; most agency URLs carry the opportunity number itself. */
+function parseSourceUrl(raw) {
+  var out = { url: "", host: "", siteLabel: "", kind: "", oppNumber: "", oppId: "" };
+  var v = String(raw || "").trim();
+  if (!v) return out;
+  if (!/^https?:\/\//i.test(v)) v = "https://" + v;
+  var u;
+  try { u = new URL(v); } catch (e) { return out; }
+  out.url = u.href;
+  out.host = u.hostname.replace(/^www\./i, "");
+  for (var i = 0; i < KNOWN_SITES.length; i++) {
+    if (KNOWN_SITES[i].re.test(u.hostname)) { out.siteLabel = KNOWN_SITES[i].label; out.kind = KNOWN_SITES[i].kind; break; }
+  }
+  if (!out.siteLabel) out.siteLabel = out.host;
+  var oppId = u.searchParams.get("oppId") || u.searchParams.get("oppid");
+  if (!oppId) {
+    var m = u.pathname.match(/\/(?:search-results-detail|opportunity|view-opportunity)\/(\d{4,})/i);
+    if (m) oppId = m[1];
+  }
+  if (oppId) out.oppId = oppId;
+  var whole = decodeURIComponent(u.pathname + "?" + u.search);
+  var num = whole.match(/\b([A-Z]{2,6}(?:-[A-Z0-9]{1,8}){2,5})\b/);
+  if (num) out.oppNumber = num[1];
+  return out;
+}
+
+/* ==================================================================
+   2c. LIVE GRANT SEARCH
+   Kindora, through the viewer's own connector. It returns a DISCOVERY
+   record — identity, deadline, award range, focus, the application link
+   — not a full notice. That is enough to open intake with the
+   opportunity identified; it is not enough to score a rubric, and the
+   page says so rather than pretending otherwise.
+   ================================================================== */
+var KINDORA_SERVER = "Kindora Funder Discovery";
+var KINDORA_TOOL = "search_open_grants";
+
+/* One distinct fix per error code. A single generic banner would hide
+   the one action that repairs the page. */
+function mcpErrCopy(e) {
+  var code = e && e.code;
+  if (code === "server_not_connected")
+    return { text: "The " + KINDORA_SERVER + " connector is not on this account. Add it in claude.ai Settings \u2192 Connectors, then search again.", retry: false };
+  if (code === "needs_reauth")
+    return { text: "The " + KINDORA_SERVER + " connector needs reconnecting. Do that in claude.ai Settings \u2192 Connectors, then search again.", retry: false };
+  if (code === "selection_required")
+    return { text: "There is more than one connector by that name on this account. Choose one when Claude asks, then search again.", retry: false };
+  if (code === "not_in_manifest")
+    return { text: "Live search is not allowed for this page on this view \u2014 the connector was declined or switched off for it. Paste the notice text instead.", retry: false };
+  if (code === "blocked_by_policy")
+    return { text: "Your organization blocks this connector. Paste the notice text instead.", retry: false };
+  if (code === "approval_required")
+    return { text: "This connector requires per-call approval, which a page cannot ask for yet. Paste the notice text instead.", retry: false };
+  if (code === "server_not_found")
+    return { text: "That connector no longer exists upstream. Paste the notice text instead.", retry: false };
+  if (code === "server_unavailable")
+    return { text: "Kindora did not answer in time. Press Search again in a moment.", retry: true };
+  if (code === "rate_limited")
+    return { text: "Too many searches at once. Wait a few seconds and search again.", retry: true };
+  if (code === "tool_error")
+    return { text: "The search ran but reported a problem: " + (e.message || "no detail given") + ".", retry: false };
+  if (code === "bad_request" || code === "transform_error")
+    return { text: "The search request was malformed \u2014 this is a bug in the page.", retry: false };
+  if (code === "consent_required")
+    return { text: "The connector was not allowed for this page. Press Search again to be asked once more.", retry: true };
+  return { text: "The search did not complete. Press Search again in a moment, or paste the notice text.", retry: true };
+}
+
+/* Turn one Kindora result into the fields intake carries, plus a seed
+   block for the notice box that is honestly labelled as a database
+   record rather than the notice itself. */
+function seedFromGrant(g) {
+  var L = [];
+  L.push("[DATABASE RECORD \u2014 not the funder's full notice.");
+  L.push("Loaded from the Kindora grant database. It carries the opportunity's identity,");
+  L.push("deadline and award range, but NOT the scoring rubric, the required attachments,");
+  L.push("the page limits or the cost-share rules. Paste the funder's own notice below this");
+  L.push("block before relying on a rubric score.]");
+  L.push("");
+  L.push("OPPORTUNITY: " + (txt(g.title) || "untitled"));
+  L.push("FUNDER: " + (txt(g.funder_name) || "not stated") +
+    (txt(g.funder_state) ? " (" + txt(g.funder_state) + ")" : "") +
+    (txt(g.funder_ein) ? " \u2014 EIN " + txt(g.funder_ein) : ""));
+  L.push("SOURCE TYPE: " + (txt(g.source) || "not stated"));
+  L.push("");
+  if (txt(g.description)) { L.push("DESCRIPTION:"); L.push(txt(g.description)); L.push(""); }
+  L.push("DEADLINE: " + (txt(g.deadline) || "not stated") +
+    (txt(g.deadline_type) ? " (" + txt(g.deadline_type).replace(/_/g, " ") + ")" : "") +
+    (num(g.days_until_close) !== null ? " \u2014 " + num(g.days_until_close) + " days out" : ""));
+  L.push("AWARD RANGE: " + (txt(g.grant_range) || "not stated"));
+  if (txt(g.intake_type)) L.push("HOW TO APPLY: " + txt(g.intake_type) +
+    (g.accepts_unsolicited === true ? " \u2014 accepts unsolicited requests" :
+     (g.accepts_unsolicited === false ? " \u2014 does NOT accept unsolicited requests" : "")));
+  if (asArr(g.focus_areas).length) { L.push(""); L.push("FOCUS AREAS:"); asArr(g.focus_areas).forEach(function (f) { L.push("  - " + txt(f)); }); }
+  if (asArr(g.geographic_focus).length) { L.push(""); L.push("GEOGRAPHIC FOCUS:"); asArr(g.geographic_focus).forEach(function (f) { L.push("  - " + txt(f)); }); }
+  if (txt(g.application_url)) { L.push(""); L.push("APPLICATION LINK: " + txt(g.application_url)); }
+  L.push("");
+  L.push("--- PASTE THE FUNDER'S FULL NOTICE BELOW THIS LINE ---");
+  L.push("");
+  return L.join("\n");
+}
 
 var READINESS_DIMS = [
   { key: "registrations",         label: "Federal registrations & portal access", max: 25 },
@@ -1407,6 +1562,100 @@ function StatedCriteria(props) {
    8. TABS
    ================================================================== */
 
+/* Saved sites a notice comes from. Not a fetcher — a record plus a way
+   back to the site, because the page is blocked from downloading one. */
+function SourcesPanel(props) {
+  var list = asArr(props.sources);
+  function setSrc(i, k, v) {
+    var next = list.slice();
+    next[i] = Object.assign({}, next[i], (function (o) { o[k] = v; return o; })({}));
+    props.setSources(next);
+  }
+  return h(Panel, { title: "Sites we work from", note: list.length + " saved" },
+    h("div.stack-sm", null,
+      h("div", null, list.map(function (src, i) {
+        return h("div.srcrow", { key: i },
+          h("input", { type: "text", id: "src-name-" + i, value: src.name || "", placeholder: "Site name",
+            onChange: function (e) { setSrc(i, "name", e.target.value); } }),
+          h("input", { type: "text", id: "src-url-" + i, value: src.url || "", placeholder: "https://",
+            onChange: function (e) { setSrc(i, "url", e.target.value); } }),
+          h("select", { id: "src-kind-" + i, value: src.kind || "Other",
+            onChange: function (e) { setSrc(i, "kind", e.target.value); } },
+            SOURCE_KINDS.map(function (k) { return h("option", { key: k, value: k }, k); })),
+          h("input", { type: "text", id: "src-note-" + i, value: src.note || "", placeholder: "What it is good for",
+            onChange: function (e) { setSrc(i, "note", e.target.value); } }),
+          h("div", { style: { display: "flex", gap: "8px", whiteSpace: "nowrap" } },
+            isStr(src.url)
+              ? h("a", { href: src.url, target: "_blank", rel: "noopener noreferrer" }, "Open")
+              : null,
+            h("button.link", { onClick: function () { props.setSources(list.filter(function (_, j) { return j !== i; })); } }, "Remove"))
+        );
+      })),
+      h("div", { style: { display: "flex", gap: "10px", flexWrap: "wrap" } },
+        h("button.btn.ghost.sm", { onClick: function () { props.setSources(list.concat([{ name: "", url: "", kind: "Other", note: "" }])); } },
+          "Add a site"),
+        props.storageReady && props.dirty
+          ? h("button.btn.sm", { disabled: props.saving, onClick: props.onSave }, props.saving ? "Saving…" : "Save")
+          : null)
+    ));
+}
+
+/* Live search against the viewer's grant-database connector. */
+function GrantSearch(props) {
+  var q = props.query;
+  var hits = asArr(props.hits);
+  return h(Panel, { title: "Find it in the live grant database", note: props.searching ? "Searching…" : (props.searched ? hits.length + " found" : "Kindora") },
+    h("div.stack-sm", null,
+      h("p", { style: { margin: 0, color: "var(--ink-2)", maxWidth: "74ch" } },
+        "Search the database instead of reading the site. A result fills in the funder, the deadline, the award range and the application link, and seeds the box below — then paste the funder's own notice on top of it, because the rubric and the attachment list only exist there."),
+      h("div.fieldgrid", null,
+        h(Field, { id: "gs-q", label: "What the program is about", value: q.query,
+          placeholder: "e.g. youth literacy after school", onChange: function (v) { props.setQuery({ query: v }); } }),
+        h(Field, { id: "gs-state", label: "State", value: q.state, placeholder: "DE", onChange: function (v) { props.setQuery({ state: v.toUpperCase().slice(0, 2) }); } }),
+        h(Field, { id: "gs-source", label: "Source", value: q.source, options: ["both", "foundation", "government"],
+          onChange: function (v) { props.setQuery({ source: v }); } }),
+        h(Field, { id: "gs-days", label: "Deadline within (days)", value: q.days, placeholder: "90", onChange: function (v) { props.setQuery({ days: v.replace(/[^0-9]/g, "") }); } }),
+        h(Field, { id: "gs-min", label: "Minimum award ($)", value: q.minAward, placeholder: "any", onChange: function (v) { props.setQuery({ minAward: v.replace(/[^0-9]/g, "") }); } })
+      ),
+      h("div", { style: { display: "flex", gap: "10px", flexWrap: "wrap", alignItems: "center" } },
+        h("button.btn", { disabled: props.searching || !isStr(q.query), onClick: props.onSearch },
+          props.searching ? "Searching…" : "Search"),
+        h("span", { className: "eyebrow", style: { color: "var(--ink-3)" } }, "Runs on your own connector")),
+      props.err
+        ? h("div", { className: "notice" + (props.err.retry ? "" : ".bad") }, h("strong", null, "Search unavailable. "), props.err.text)
+        : null,
+      props.searched && !hits.length && !props.err
+        ? h("p.null", null, "Nothing open matched that. Widen the deadline window, drop the state filter, or try different words.")
+        : null,
+      hits.length
+        ? h("div.hits", null, hits.map(function (g, i) {
+            var dcount = num(g.days_until_close);
+            return h("div", { key: i, className: "hit" + (dcount !== null && dcount <= 30 ? " soon" : "") },
+              h("div.hit-top", null,
+                h("h4", null, txt(g.title) || "Untitled program"),
+                h(Pill, { kind: g.source === "government" ? "info" : "unk" }, txt(g.source) || "program")),
+              h("div.hit-meta", null,
+                h("span", null, "Funder: ", h("b", null, txt(g.funder_name) || "not stated")),
+                h("span", null, "Deadline: ", h("b", null, txt(g.deadline) || "not stated")),
+                dcount !== null ? h("span", null, "Closes in: ", h("b", null, dcount + "d")) : null,
+                h("span", null, "Award: ", h("b", null, txt(g.grant_range) || "not stated"))),
+              txt(g.description) ? h("p.desc", null, clip(txt(g.description), 340)) : null,
+              asArr(g.focus_areas).length
+                ? h("div.chips", null, asArr(g.focus_areas).slice(0, 5).map(function (f, j) { return h("span.chip", { key: j }, txt(f)); }))
+                : null,
+              h("div.hit-foot", null,
+                h("button.btn.sm", { onClick: function () { props.onUse(g); } }, "Load into intake"),
+                isStr(g.application_url)
+                  ? h("a", { href: g.application_url, target: "_blank", rel: "noopener noreferrer", style: { fontSize: "12.5px" } }, "Open the funder's page")
+                  : null,
+                isStr(g.funder_kindora_url)
+                  ? h("a", { href: g.funder_kindora_url, target: "_blank", rel: "noopener noreferrer", style: { fontSize: "12.5px" } }, "Funder profile")
+                  : null));
+          }))
+        : null
+    ));
+}
+
 /* ---------- 1. Intake ---------- */
 function IntakeTab(props) {
   var st = props.state, set = props.set;
@@ -1414,13 +1663,14 @@ function IntakeTab(props) {
   var pend = countPending(props.client);
   var chars = st.noticeText.length;
   var parts = chars ? chunkText(st.noticeText).length : 0;
+  var parsed = useMemo(function () { return parseSourceUrl(st.sourceUrl); }, [st.sourceUrl]);
 
   return h("div.stack", null,
     h("div.stack-sm", null,
       h("p.eyebrow", null, "Step one"),
-      h("h2", { style: { fontSize: "27px" } }, "Read a funding notice"),
+      h("h2", { style: { fontSize: "27px" } }, "Bring in a funding notice"),
       h("p.lede", null,
-        "Paste the NOFO, RFA or foundation RFP below. The desk pulls out the deadline stack, every eligibility gate, the scoring rubric and every required attachment, then scores ",
+        "Search the live grant database, or paste the notice. Either way the desk pulls out the deadline stack, every eligibility gate, the scoring rubric and every required attachment, then scores ",
         h("strong", null, txt(props.client.legalName) || "the selected client"),
         " against it. Nothing is submitted anywhere.")
     ),
@@ -1447,6 +1697,42 @@ function IntakeTab(props) {
           ".")
       : null,
 
+    props.mcpReady
+      ? h(GrantSearch, {
+          query: props.search, setQuery: props.setSearch, hits: props.hits,
+          searching: props.searching, searched: props.searched, err: props.searchErr,
+          onSearch: props.onSearch, onUse: props.onUseHit
+        })
+      : null,
+
+    h(Panel, { title: "Where this one came from" },
+      h("div.stack-sm", null,
+        h("div.fieldgrid", null,
+          h(Field, { id: "in-url", label: "Notice URL", value: st.sourceUrl,
+            placeholder: "Paste the link to the posting", onChange: function (v) { set({ sourceUrl: v }); } }),
+          h(Field, { id: "in-funder", label: "Funder", value: st.funder, placeholder: "e.g. HHS / ACF, Longwood Foundation", onChange: function (v) { set({ funder: v }); } }),
+          h(Field, { id: "in-portal", label: "Submission portal", value: st.portal, placeholder: "Grants.gov, Foundant, funder's own form", onChange: function (v) { set({ portal: v }); } }),
+          h(Field, { id: "in-found", label: "How we found it", value: st.foundVia, placeholder: "e.g. Grants.gov alert, live search, referral", onChange: function (v) { set({ foundVia: v }); } })
+        ),
+        isStr(parsed.url)
+          ? h("div.notice.plain", null,
+              h("div", null, h("strong", null, "Read from that link: "),
+                parsed.siteLabel,
+                parsed.oppNumber ? h("span", null, " · opportunity ", h("span.mono", null, parsed.oppNumber)) : null,
+                parsed.oppId ? h("span", null, " · listing id ", h("span.mono", null, parsed.oppId)) : null),
+              h("div", { style: { marginTop: "6px" } },
+                h("a", { href: parsed.url, target: "_blank", rel: "noopener noreferrer" }, "Open it in a new tab"),
+                h("span", { style: { color: "var(--ink-3)" } }, " — then copy the notice text into the box below."),
+                !asArr(props.sources).some(function (x) { return isStr(x.url) && x.url.indexOf(parsed.host) >= 0; })
+                  ? h("span", null, " ", h("button.link", { onClick: function () { props.addSource({ name: parsed.siteLabel, url: "https://" + parsed.host, kind: parsed.kind || "Other", note: "" }); } },
+                      "Save " + parsed.siteLabel + " to the sites list"))
+                  : null))
+          : null,
+        h("div.notice", null,
+          h("strong", null, "The page cannot download a website. "),
+          "Browsers block a published page from fetching other sites, so there is no button that can pull a notice straight off a URL. The two ways in are the live database search above, and pasting the text below. If the notice is a PDF, open it and copy the text.")
+      )),
+
     h(Panel, { title: "Notice text", note: chars ? chars.toLocaleString() + " characters · " + parts + (parts === 1 ? " pass" : " passes") : null },
       h("div.stack-sm", null,
         h("textarea", {
@@ -1465,14 +1751,8 @@ function IntakeTab(props) {
       )
     ),
 
-    h(Panel, { title: "Where it came from", note: "Optional" },
-      h("div.fieldgrid", null,
-        h(Field, { id: "in-funder", label: "Funder", value: st.funder, placeholder: "e.g. HHS / ACF, Longwood Foundation", onChange: function (v) { set({ funder: v }); } }),
-        h(Field, { id: "in-portal", label: "Submission portal", value: st.portal, placeholder: "Grants.gov, eCivis, funder's own form", onChange: function (v) { set({ portal: v }); } }),
-        h(Field, { id: "in-url", label: "Source URL", value: st.sourceUrl, placeholder: "Link to the posting", onChange: function (v) { set({ sourceUrl: v }); } }),
-        h(Field, { id: "in-found", label: "How we found it", value: st.foundVia, placeholder: "e.g. Grants.gov alert, GrantWatch DE research", onChange: function (v) { set({ foundVia: v }); } })
-      )
-    ),
+    h(SourcesPanel, { sources: props.sources, setSources: props.setSources,
+      storageReady: props.storageReady, dirty: props.dirty, saving: props.saving, onSave: props.onSave }),
 
     props.error ? h("div.notice.bad", null, h("strong", null, "Analysis stopped. "), props.error) : null,
 
@@ -2442,9 +2722,18 @@ function App() {
   var sF = useState(false), copied = sF[0], setCopied = sF[1];
   var sG = useState({ kind: "Budget spreadsheet", label: "", criterion: "", content: "", rows: [],
                       computed: null, ai: null, fileNote: "" }), check = sG[0], setCheck = sG[1];
+  var sH = useState(DEFAULT_SOURCES.slice()), sources = sH[0], setSourcesRaw = sH[1];
+  var sI = useState(null), mcpReady = sI[0], setMcpReady = sI[1];
+  var sJ = useState({ query: "", state: "", source: "both", days: "90", minAward: "" }), search = sJ[0], setSearchRaw = sJ[1];
+  var sK = useState([]), hits = sK[0], setHits = sK[1];
+  var sL = useState(false), searching = sL[0], setSearching = sL[1];
+  var sM = useState(false), searched = sM[0], setSearched = sM[1];
+  var sN = useState(null), searchErr = sN[0], setSearchErr = sN[1];
 
   var sampleRef = useRef(null);
   var dbRef = useRef(null);
+  var mcpRef = useRef(null);
+  var searchCtlRef = useRef(null);
   var dlRef = useRef(null);
   var abortRef = useRef(null);
   var loadedRef = useRef(false);
@@ -2468,6 +2757,20 @@ function App() {
       if (!live) return; dlRef.current = d; setDownloadsReady(!!d);
     }, function () { if (live) setDownloadsReady(false); });
 
+    /* Live grant search. Gate on use("mcp") resolving, and on the
+       connector actually being listed for this viewer — never by
+       probing with a call. */
+    window.claude.use("mcp").then(function (m) {
+      if (!live) return;
+      mcpRef.current = m;
+      if (!m) { setMcpReady(false); return; }
+      m.listTools(KINDORA_SERVER).then(function (res) {
+        if (!live) return;
+        var servers = asArr(res && res.servers);
+        setMcpReady(servers.length > 0);
+      }, function () { if (live) setMcpReady(true); });
+    }, function () { if (live) setMcpReady(false); });
+
     window.claude.use("db").then(function (db) {
       if (!live) return;
       dbRef.current = db;
@@ -2487,6 +2790,12 @@ function App() {
           setClients(items);
           setActiveId(isStr(data.activeId) && items.some(function (c) { return c.id === data.activeId; }) ? data.activeId : items[0].id);
         }
+        return db.doc("grantdesk/sources").get().then(function (ss) {
+          if (!live) return;
+          var sd = ss && ss.exists ? ss.data() : null;
+          if (sd && Array.isArray(sd.items) && sd.items.length) setSourcesRaw(sd.items);
+        }, function () {});
+      }).then(function () {
         loadedRef.current = true;
         setDirty(false);
       }, function () { loadedRef.current = true; });
@@ -2515,13 +2824,66 @@ function App() {
     var arr = clients.filter(function (c) { return c.id !== activeId; });
     setClients(arr); setActiveId(arr[0].id); setDirty(true);
   }
+  function setSources(next) { setSourcesRaw(next); touch(); }
+  function addSource(src) { setSourcesRaw(sources.concat([src])); touch(); }
+  function setSearch(patch) { setSearchRaw(Object.assign({}, search, patch)); }
+
   function saveAll() {
     var db = dbRef.current;
     if (!db) return;
     setSaving(true);
-    db.doc("grantdesk/clients").set({ items: clients, activeId: activeId, savedAt: new Date().toISOString() })
-      .then(function () { setSaving(false); setDirty(false); },
-            function () { setSaving(false); setError("Could not save the client record. Your edits are still on screen."); });
+    Promise.all([
+      db.doc("grantdesk/clients").set({ items: clients, activeId: activeId, savedAt: new Date().toISOString() }),
+      db.doc("grantdesk/sources").set({ items: sources })
+    ]).then(function () { setSaving(false); setDirty(false); },
+            function () { setSaving(false); setError("Could not save. Your edits are still on screen."); });
+  }
+
+  /* One search, on a click. callTool rather than watchTool: the input
+     changes every time, so there is nothing to keep current. */
+  function runSearch() {
+    var m = mcpRef.current;
+    if (!m || !isStr(search.query)) return;
+    if (searchCtlRef.current) searchCtlRef.current.abort();
+    var ctl = new AbortController();
+    searchCtlRef.current = ctl;
+    setSearching(true); setSearchErr(null);
+
+    var input = { query: search.query.trim(), limit: 12 };
+    if (isStr(search.state) && search.state.length === 2) input.state = search.state;
+    if (search.source === "foundation" || search.source === "government") input.source = search.source;
+    var d = num(search.days); if (d !== null && d >= 1 && d <= 365) input.deadline_days = Math.round(d);
+    var mn = num(search.minAward); if (mn !== null && mn > 0) input.min_award = Math.round(mn);
+
+    m.callTool(KINDORA_SERVER, KINDORA_TOOL, input, { signal: ctl.signal, cache: { staleTime: 60000, gcTime: 900000 } })
+      .then(function (res) {
+        if (ctl.signal.aborted) return;
+        var payload = res && res.payload;
+        if (typeof payload === "string") { try { payload = JSON.parse(payload); } catch (e) { payload = null; } }
+        var rows = asArr(payload && payload.results);
+        setHits(rows); setSearched(true); setSearching(false);
+      }, function (e) {
+        if (ctl.signal.aborted || (e && e.code === "cancelled")) { setSearching(false); return; }
+        setSearching(false); setSearched(true); setHits([]);
+        setSearchErr(mcpErrCopy(e));
+      });
+  }
+
+  /* Load one database record into intake. It seeds the notice box with
+     a labelled record, not a notice — the funder's own text still has
+     to go in for the rubric to mean anything. */
+  function useHit(g) {
+    var url = txt(g.application_url) || txt(g.funder_kindora_url) || "";
+    setIntake({
+      noticeText: seedFromGrant(g),
+      funder: txt(g.funder_name) || "",
+      portal: g.source === "government" ? "Grants.gov" : (txt(g.intake_type) === "loi" ? "Funder portal — letter of intent first" : "Funder portal"),
+      sourceUrl: url,
+      foundVia: "Kindora live search"
+    });
+    setBrief(null); setAssess(null); setError(null);
+    var el = document.getElementById("nofo-text");
+    if (el && el.scrollIntoView) el.scrollIntoView({ block: "center", behavior: "smooth" });
   }
 
   var deadline = brief ? parseDate((brief.dates || {}).applicationDeadline) : null;
@@ -2668,7 +3030,12 @@ function App() {
       state: intake, set: function (patch) { setIntake(Object.assign({}, intake, patch)); },
       client: client, phase: phase, steps: steps, streamChars: streamChars,
       error: error, brief: brief, sampleReady: sampleReady,
-      onAnalyze: analyze, onStop: stop, go: setTab
+      onAnalyze: analyze, onStop: stop, go: setTab,
+      sources: sources, setSources: setSources, addSource: addSource,
+      storageReady: storageReady, dirty: dirty, saving: saving, onSave: saveAll,
+      mcpReady: mcpReady, search: search, setSearch: setSearch, hits: hits,
+      searching: searching, searched: searched, searchErr: searchErr,
+      onSearch: runSearch, onUseHit: useHit
     });
   } else if (tab === "notice") {
     body = brief ? h(NoticeTab, { brief: brief, intake: intake })

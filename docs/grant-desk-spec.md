@@ -161,6 +161,62 @@ text** — the honest limitation, surfaced in the UI rather than hidden.
 
 ---
 
+## 4b. Getting a notice in — and why there is no "load from URL" button
+
+The obvious intake affordance is: paste the URL of the grant page, press a button, the notice
+loads. **It cannot be built in the page.** A published artifact's browser sandbox blocks every
+request to a host outside a short allowlist (cdnjs, Google Fonts), and it blocks them *silently* —
+no error the page can catch and explain. A "fetch this URL" button would be a button that does
+nothing, which is worse than no button.
+
+So the requirement gets served three other ways, in descending order of how much typing they save:
+
+**1. Search the live grant database instead of reading the site.** The `mcp` capability lets the
+page call the viewer's own claude.ai connectors. **Kindora Funder Discovery**'s
+`search_open_grants` is queried by topic, state, source type, deadline window and minimum award,
+and each result loads into intake with one click — funder, deadline, award range, focus areas,
+application link, and the notice box seeded with the record. This inverts the original request:
+rather than reading a grant-only site and copying from it, query the database those sites
+aggregate.
+
+*Granted* was the other candidate and is **deliberately not used** — `search_grants` timed out at
+60 s on two separate attempts during the build, so there is no observed response shape to build
+against. Worth retrying later; it should not be declared until a real call succeeds.
+
+**What a database record is not.** Kindora returns a *discovery* record: identity, deadline, award
+range, focus, link. It carries **no scoring rubric, no required attachments, no page limits and no
+cost-share rules** — because those exist only in the funder's own notice. So the seeded text is
+explicitly headed `[DATABASE RECORD — not the funder's full notice]` and ends with a line telling
+you to paste the real notice beneath it. Letting a rubric score run off a discovery record would
+be the worst failure mode this tool has: a confident number derived from nothing.
+
+**2. Read what the URL itself can tell you.** Pasting a notice URL parses out the site (Grants.gov,
+GrantWatch, Foundant, HHS, Candid…), the Grants.gov numeric listing id, and the opportunity number
+where the URL carries one — `https://www.acf.hhs.gov/grants/open/foa/view/ACF-EX-2027-0042` yields
+`ACF-EX-2027-0042`. The record is identified even before the text is in, the link opens in a new
+tab, and the site can be saved to the sites list in one click.
+
+**3. A saved sites list.** The grant-only sites the firm actually works from, stored in
+`grantdesk/sources` — name, URL, kind, and what each is good for. One click back to the site,
+because the last step is always a human copy-paste.
+
+**If you want true URL-to-text**, it does not belong in the page — it belongs in the skill version
+(§7), where a script can fetch and parse a URL or a PDF with no sandbox in the way. That is a
+second argument for building the skill port.
+
+### Connector trade-off worth knowing
+
+Declaring `mcp` means **this artifact can no longer be shared publicly** — a connector grant is
+viewer-consented and bars public sharing. That is acceptable here because the client-facing
+surface is WordPress (§7), not this artifact, and this page is the internal DMS tool. If a public
+link ever matters more than live search, dropping the `mcp` declaration restores it and the search
+block simply hides itself.
+
+Every failure mode gets its own copy and its own fix, per the capability's failure doctrine —
+connector not added, needs reconnecting, duplicate connectors unchosen, blocked by org policy,
+declined for this page, upstream timeout. A single "something went wrong" banner is the named
+anti-pattern, because it hides the one action that would repair the page.
+
 ## 5. Data model
 
 One record per client, stored as `grantdesk/clients` in the artifact's own store:
@@ -177,6 +233,9 @@ One record per client, stored as `grantdesk/clients` in the artifact's own store
   with status (`on file` / `pending` / `missing` / `expired` / `n/a`) and a note
 - **`regDone`** — the registration chain, seeded from the profile once, then owned by the
   checkboxes because a person looked
+
+Firm-wide rather than per-client, in `grantdesk/sources`: the saved list of grant sites the firm
+works from (§4b).
 
 The binder mapping is deliberate: **the gap list is simultaneously the application to-do list and
 the build sheet for the Grant Ready Binder we already sell.** The analyzer's output is a work
@@ -199,7 +258,9 @@ order for the existing product.
 4. **Extraction quality tracks input quality.** A clean NOFO extracts well. A scanned PDF pasted
    as broken text extracts badly, and the desk will not know it did.
 5. **First sheet only** on a workbook, and no PDF parsing.
-6. **Nothing is filed anywhere.** The desk assesses; a human submits.
+6. **No URL fetching**, ever, in the page — see §4b. The live database search and the URL parser
+   are what stand in for it.
+7. **Nothing is filed anywhere.** The desk assesses; a human submits.
 
 ---
 
@@ -271,9 +332,9 @@ arithmetic reusable everywhere and testable in CI.
    live assessment
 3. Skill version, composing with `grant-ready-binder`
 4. Read-only client view on the existing WordPress stack
-5. Opportunity discovery — the Granted and Kindora connectors can feed candidate notices into
-   intake instead of pasting them. Deliberately left out of v1: the analyzer analyzes a notice you
-   already have, and connector-shaped work should not be guessed at
+5. ~~Opportunity discovery~~ — **done**: Kindora live search on intake (§4b). Still open: retry
+   *Granted* once its search tool stops timing out, and add URL/PDF fetching in the skill version
+   where no sandbox blocks it
 6. Client-operated analysis, only behind a real term of service
 
 ---
