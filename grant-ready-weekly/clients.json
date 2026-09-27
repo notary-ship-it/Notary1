@@ -1,0 +1,22 @@
+{
+  "_comment": "Roster of clients subscribed to the Grant Ready Weekly service. See README.md in this folder for how this file is used and how to add/remove clients.",
+  "clients": [
+    {
+      "id": "plain-truth-baptist-church",
+      "name": "Plain Truth Baptist Church",
+      "legal_name": "Plain Truth Baptist Church, Inc.",
+      "status": "active",
+      "started": "2026-08-10",
+      "criteria": [
+        "community outreach ministries",
+        "historic building preservation"
+      ],
+      "recipients": {
+        "to": ["notary@delawaremobilesignings.com"],
+        "cc": ["stevensdon60@yahoo.com", "lcrawford44@aol.com"]
+      },
+      "dms_contact": "Marcia Boyer",
+      "notes": "SAM.gov UEI registered under 'Plain Truth Gospel Church' legal-name mismatch as of Sep 2026; CAGE code GNUNEJDX1L57. Not related to email content generation, kept here for account continuity."
+    }
+  ]
+}
