@@ -1,0 +1,55 @@
+{
+  "$schema_notes": "Roster for the Grant Ready Weekly service. One entry per client. status is one of: active, stopped. Never delete an entry when a client is stopped — set status instead.",
+  "clients": [
+    {
+      "id": "plain-truth-baptist-church",
+      "org_name": "Plain Truth Baptist Church, Inc.",
+      "status": "active",
+      "contacts": {
+        "to": "notary@delawaremobilesignings.com",
+        "cc": [
+          { "name": "Don Stevens", "email": "stevensdon60@yahoo.com" },
+          { "name": "Lionel Crawford", "email": "lcrawford44@aol.com" }
+        ]
+      },
+      "criteria": {
+        "keywords": [
+          "historic preservation",
+          "church/sanctuary building repair",
+          "community & social services",
+          "faith-based nonprofit programs"
+        ],
+        "geography": "Delaware",
+        "org_type": "501(c)(3) church / faith-based nonprofit",
+        "funding_types": ["federal", "state", "foundation", "community foundation"],
+        "notes": "Also tracking a SAM.gov / UEI legal-name mismatch (\"Plain Truth Gospel Church\" vs. \"Plain Truth Baptist Church, Inc.\") as an open service item alongside the weekly grant search."
+      },
+      "cadence": {
+        "frequency": "weekly",
+        "preferred_day": "Monday",
+        "notes": "Actual send dates have drifted (Jul 28, Aug 3, Aug 10, Aug 19, gap to Sep 10, Sep 14, Sep 21, Sep 28) — consistent with the schedule being recreated manually rather than a true unattended weekly trigger."
+      },
+      "sender_persona": "Marcia Boyer, Delaware Mobile Signings",
+      "source": {
+        "onboarded_via": "manual — pre-existing client, seeded from Gmail send history on 2026-09-28",
+        "fluentcrm_contact_id": null,
+        "fluentcart_order_id": null,
+        "product": null
+      },
+      "history": {
+        "first_sent": "2026-07-28",
+        "last_sent": "2026-09-28",
+        "sends": [
+          { "date": "2026-07-28", "thread_id": "19fa9fe99b183836" },
+          { "date": "2026-08-03", "thread_id": "19fc8056fe12da87" },
+          { "date": "2026-08-10", "thread_id": "19febb318d0b550b" },
+          { "date": "2026-08-19", "thread_id": "1a01a86efc5b7278" },
+          { "date": "2026-09-10", "thread_id": "1a08b7b1d25b8edc" },
+          { "date": "2026-09-14", "thread_id": "1a0a013c662e6db0" },
+          { "date": "2026-09-21", "thread_id": "1a0c40f570e13631" },
+          { "date": "2026-09-28", "thread_id": "1a0e83336cdab6a1" }
+        ]
+      }
+    }
+  ]
+}
