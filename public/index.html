@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Delaware Mobile Signings</title>
+<meta name="description" content="Delaware Mobile Signings LLC — mobile notary, apostille, loan signings, estate execution, fingerprinting and Delaware corporate filings.">
+<meta name="theme-color" content="#0A1F3C">
+<style>
+  :root{
+    --navy:#0A1F3C; --navy-2:#123056; --gold:#C8A24A; --gold-soft:#E3C87F;
+    --bg:#F7F8FA; --surface:#FFFFFF; --text:#12243D; --muted:#5A6B82;
+    --line:#DCE3EC; --ok:#1E7B4D; --err:#B3261E; --radius:14px;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#0A1220; --surface:#111D31; --text:#E8EEF7; --muted:#9BAECA;
+      --line:#23344E; --navy:#E8EEF7; --navy-2:#C7D6EA;
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#0A1220; --surface:#111D31; --text:#E8EEF7; --muted:#9BAECA;
+    --line:#23344E; --navy:#E8EEF7; --navy-2:#C7D6EA;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    background:var(--bg); color:var(--text);
+    font:16px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+    -webkit-text-size-adjust:100%;
+  }
+  .wrap{max-width:640px;margin:0 auto;padding:0 16px 56px}
+  header.hero{
+    background:linear-gradient(160deg,#0A1F3C 0%,#123056 100%);
+    color:#fff;padding:28px 16px 24px;text-align:center;
+    border-bottom:3px solid var(--gold);
+  }
+  header.hero .inner{max-width:640px;margin:0 auto}
+  .mark{
+    width:56px;height:56px;border-radius:50%;margin:0 auto 12px;
+    display:flex;align-items:center;justify-content:center;
+    background:var(--gold);color:#0A1F3C;font-weight:800;font-size:20px;letter-spacing:.5px;
+  }
+  header.hero h1{margin:0;font-size:22px;line-height:1.25;letter-spacing:.2px}
+  header.hero p{margin:8px 0 0;font-size:14px;color:#C9D7EA}
+  .badge{
+    display:inline-block;margin-top:12px;padding:5px 12px;border-radius:999px;
+    background:rgba(200,162,74,.16);border:1px solid rgba(200,162,74,.45);
+    color:var(--gold-soft);font-size:12px;font-weight:600;letter-spacing:.3px;
+  }
+  .card{
+    background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);
+    padding:20px;margin-top:20px;
+  }
+  h2{font-size:18px;margin:0 0 4px}
+  .sub{color:var(--muted);font-size:14px;margin:0 0 18px}
+  label{display:block;font-size:13px;font-weight:600;margin:0 0 6px;color:var(--text)}
+  .req{color:var(--gold);font-weight:700}
+  input[type=text],input[type=email],input[type=tel],textarea,select{
+    width:100%;padding:13px 14px;font-size:16px;color:var(--text);
+    background:var(--bg);border:1.5px solid var(--line);border-radius:10px;
+    font-family:inherit;
+  }
+  input:focus,textarea:focus,select:focus{outline:none;border-color:var(--gold);box-shadow:0 0 0 3px rgba(200,162,74,.18)}
+  .field{margin-bottom:16px}
+  .row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  @media (max-width:420px){.row{grid-template-columns:1fr}}
+  .seg{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:20px}
+  .seg button{
+    padding:14px 8px;font-size:15px;font-weight:600;font-family:inherit;cursor:pointer;
+    background:var(--bg);color:var(--muted);border:1.5px solid var(--line);border-radius:10px;
+  }
+  .seg button[aria-pressed="true"]{
+    background:var(--gold);border-color:var(--gold);color:#0A1F3C;
+  }
+  .chips{display:flex;flex-wrap:wrap;gap:8px}
+  .chip{
+    padding:9px 13px;font-size:13.5px;font-family:inherit;cursor:pointer;
+    background:var(--bg);color:var(--text);border:1.5px solid var(--line);border-radius:999px;
+  }
+  .chip[aria-pressed="true"]{background:rgba(200,162,74,.16);border-color:var(--gold);color:var(--text);font-weight:600}
+  .check{display:flex;gap:10px;align-items:flex-start;margin-bottom:14px}
+  .check input{width:20px;height:20px;margin:1px 0 0;flex:none;accent-color:var(--gold)}
+  .check span{font-size:13.5px;color:var(--muted);line-height:1.45}
+  .btn{
+    width:100%;padding:16px;font-size:17px;font-weight:700;font-family:inherit;cursor:pointer;
+    background:var(--gold);color:#0A1F3C;border:none;border-radius:12px;margin-top:4px;
+  }
+  .btn:disabled{opacity:.6;cursor:default}
+  .btn.secondary{background:transparent;color:var(--text);border:1.5px solid var(--line);font-weight:600;font-size:15px}
+  .fineprint{font-size:12px;color:var(--muted);margin:12px 0 0;text-align:center;line-height:1.5}
+  .err{color:var(--err);font-size:13px;margin-top:8px;font-weight:600}
+  .hp{position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden}
+  .svc{border-top:1px solid var(--line);padding:15px 0}
+  .svc:first-of-type{border-top:none;padding-top:4px}
+  .svc h3{margin:0 0 3px;font-size:15.5px;display:flex;justify-content:space-between;gap:12px;align-items:baseline}
+  .svc h3 .price{color:var(--gold);font-weight:700;font-size:14px;white-space:nowrap}
+  .svc p{margin:0;font-size:13.5px;color:var(--muted)}
+  .tiers{width:100%;border-collapse:collapse;margin-top:10px;font-size:13px}
+  .tiers th,.tiers td{text-align:left;padding:7px 8px;border-bottom:1px solid var(--line)}
+  .tiers th{color:var(--muted);font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.4px}
+  .tiers td:nth-child(2){color:var(--gold);font-weight:700;white-space:nowrap}
+  .cta{
+    display:block;text-align:center;padding:15px;border-radius:12px;text-decoration:none;
+    font-weight:700;font-size:16px;margin-top:10px;
+    background:var(--gold);color:#0A1F3C;
+  }
+  .cta.alt{background:transparent;border:1.5px solid var(--line);color:var(--text)}
+  .contact a{color:var(--text);text-decoration:none;font-weight:600}
+  .contact div{padding:9px 0;border-bottom:1px solid var(--line);font-size:14.5px}
+  .contact div:last-child{border-bottom:none}
+  .contact .lbl{display:block;font-size:11.5px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);font-weight:700;margin-bottom:2px}
+  .creds{display:flex;flex-wrap:wrap;gap:7px;margin-top:6px}
+  .creds span{font-size:12px;padding:5px 10px;border-radius:999px;background:var(--bg);border:1px solid var(--line);color:var(--muted);font-weight:600}
+  .ok-mark{
+    width:58px;height:58px;border-radius:50%;background:rgba(30,123,77,.12);
+    display:flex;align-items:center;justify-content:center;margin:0 auto 14px;
+    font-size:30px;color:var(--ok);
+  }
+  .hidden{display:none !important}
+  footer{text-align:center;font-size:12px;color:var(--muted);margin-top:26px;line-height:1.6}
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="inner">
+    <div class="mark">DMS</div>
+    <h1>Delaware Mobile Signings LLC</h1>
+    <p>Mobile Notary · Apostille · Loan Signings · Fingerprinting</p>
+    <span class="badge" id="eventBadge">Delaware VA Stand Down</span>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <!-- ============ STEP 1: INTAKE FORM ============ -->
+  <section id="formStep">
+    <div class="card">
+      <h2>Let's get you connected</h2>
+      <p class="sub">Takes about 20 seconds. We'll show you everything we do as soon as you're done.</p>
+
+      <div class="seg" role="group" aria-label="Are you an individual or a business?">
+        <button type="button" id="btnIndividual" aria-pressed="true">I'm an individual</button>
+        <button type="button" id="btnBusiness" aria-pressed="false">I'm a business</button>
+      </div>
+
+      <form id="leadForm" novalidate>
+        <div class="hp" aria-hidden="true">
+          <label for="website">Leave this empty</label>
+          <input type="text" id="website" name="website" tabindex="-1" autocomplete="off">
+        </div>
+
+        <div class="row">
+          <div class="field">
+            <label for="firstName">First name <span class="req">*</span></label>
+            <input type="text" id="firstName" name="firstName" autocomplete="given-name" autocapitalize="words" required>
+          </div>
+          <div class="field">
+            <label for="lastName">Last name <span class="req">*</span></label>
+            <input type="text" id="lastName" name="lastName" autocomplete="family-name" autocapitalize="words" required>
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="email">Email <span class="req">*</span></label>
+          <input type="email" id="email" name="email" autocomplete="email" inputmode="email" autocapitalize="off" autocorrect="off" required>
+        </div>
+
+        <div class="field">
+          <label for="phone">Phone <span class="req">*</span></label>
+          <input type="tel" id="phone" name="phone" autocomplete="tel" inputmode="tel" placeholder="(302) 555-0123" required>
+        </div>
+
+        <div id="businessFields" class="hidden">
+          <div class="field">
+            <label for="company">Company / organization <span class="req">*</span></label>
+            <input type="text" id="company" name="company" autocomplete="organization" autocapitalize="words">
+          </div>
+          <div class="field">
+            <label for="jobTitle">Your role <span style="color:var(--muted);font-weight:500">(optional)</span></label>
+            <input type="text" id="jobTitle" name="jobTitle" autocomplete="organization-title" autocapitalize="words">
+          </div>
+        </div>
+
+        <div class="field">
+          <label>What can we help with? <span style="color:var(--muted);font-weight:500">(optional — tap any)</span></label>
+          <div class="chips" id="serviceChips">
+            <button type="button" class="chip" aria-pressed="false" data-svc="Mobile Notary">Mobile notary</button>
+            <button type="button" class="chip" aria-pressed="false" data-svc="Apostille">Apostille</button>
+            <button type="button" class="chip" aria-pressed="false" data-svc="Estate Documents">Estate documents</button>
+            <button type="button" class="chip" aria-pressed="false" data-svc="Loan Signing">Loan signing</button>
+            <button type="button" class="chip" aria-pressed="false" data-svc="Fingerprinting">Fingerprinting</button>
+            <button type="button" class="chip" aria-pressed="false" data-svc="Translation">Translation</button>
+            <button type="button" class="chip" aria-pressed="false" data-svc="Business Filings">Business filings</button>
+            <button type="button" class="chip" aria-pressed="false" data-svc="Partnership">Partner with DMS</button>
+          </div>
+        </div>
+
+        <div class="check">
+          <input type="checkbox" id="veteran" name="veteran">
+          <span>I'm a veteran, service member, or military family</span>
+        </div>
+
+        <div class="check">
+          <input type="checkbox" id="smsOptIn" name="smsOptIn">
+          <span>Yes, you can text me about my request and DMS updates. Message and data rates may apply. Reply STOP to opt out.</span>
+        </div>
+
+        <button type="submit" class="btn" id="submitBtn">See our services &rarr;</button>
+        <p class="err hidden" id="formError"></p>
+        <p class="fineprint">By submitting, you agree Delaware Mobile Signings LLC may contact you about your request.</p>
+      </form>
+    </div>
+  </section>
+
+  <!-- ============ STEP 2: SERVICES / THANK YOU ============ -->
+  <section id="infoStep" class="hidden">
+
+    <div class="card" style="text-align:center">
+      <div class="ok-mark">&#10003;</div>
+      <h2 id="thanksName">You're all set</h2>
+      <p class="sub" style="margin-bottom:0" id="thanksLine">We've got your info — Marcia or the DMS team will follow up shortly. Here's everything we do.</p>
+      <p class="fineprint hidden" id="offlineNote">Signal is spotty here — we saved your info on this phone and it will send automatically. You can also call us at 302-316-3926.</p>
+    </div>
+
+    <div class="card">
+      <h2>What we do</h2>
+      <p class="sub">Published starting prices. Final quote depends on pages, signers, travel, and timing.</p>
+
+      <div class="svc">
+        <h3><span>Mobile Notary</span><span class="price">from $35</span></h3>
+        <p>We come to you — home, office, hospital, care facility, or correctional facility. Acknowledgments, bills of sale, residency forms, and more. Printing, extra signers, travel, and after-hours are quoted on top.</p>
+      </div>
+
+      <div class="svc">
+        <h3><span>Estate Document Execution</span><span class="price">from $125 / person</span></h3>
+        <p>Last Will and Testament, medical/health directive, and durable power of attorney — notarized together in one appointment. Priced per person, so a couple signing mirror documents is two. We execute; we don't draft or advise on content.</p>
+      </div>
+
+      <div class="svc">
+        <h3><span>Loan Signings</span><span class="price">from $125</span></h3>
+        <p>Purchase, refinance, and HELOC packages. Same-day drop included. NNA-certified and background-screened.</p>
+      </div>
+
+      <div class="svc">
+        <h3><span>Apostille &amp; International Authentication</span><span class="price">from $255</span></h3>
+        <p>Flat rate, all-inclusive — state fees, notarization, translation, and international return shipping are all in the price.</p>
+        <table class="tiers">
+          <tr><th>Tier</th><th>Price</th><th>Turnaround</th></tr>
+          <tr><td>Standard</td><td>$255</td><td>7&ndash;10 business days</td></tr>
+          <tr><td>Premium</td><td>$355</td><td>3&ndash;5 business days</td></tr>
+          <tr><td>Express</td><td>$455</td><td>1&ndash;2 business days</td></tr>
+        </table>
+        <p style="margin-top:9px">Going to a non-Hague country? That routes through the US Department of State and the consulate — we'll scope it for you.</p>
+      </div>
+
+      <div class="svc">
+        <h3><span>Fingerprinting</span><span class="price">$65</span></h3>
+        <p>Fingerprint card appointment on location, one card included. Additional card $25. Add a document notarization for $10. LiveScan (Fieldprint-authorized) is available in-office at our Dover hub.</p>
+      </div>
+
+      <div class="svc">
+        <h3><span>Certified &amp; Sworn Translation</span><span class="price">quoted live</span></h3>
+        <p>Certified translation for USCIS, courts, and US institutions; sworn translation for foreign consulates and overseas authorities. Priced by language pair and page count — ask us for a same-day quote.</p>
+      </div>
+
+      <div class="svc">
+        <h3><span>Delaware Business &amp; Corporate Filings</span><span class="price">state fees + service</span></h3>
+        <p>Certificates of Good Standing ordered <strong>same day</strong>. Entity formation and amendment filings, certified copies, UCC-1 and UCC-3 filings, incumbency certificates drafted on short notice, and registered agent coordination. State fees are billed at cost, itemized separately from our service fee.</p>
+      </div>
+    </div>
+
+    <div class="card" id="businessCard">
+      <h2>Working with other businesses</h2>
+      <p class="sub" style="margin-bottom:12px">Title companies, law firms, lenders, staffing agencies, and nonprofits.</p>
+      <div class="svc" style="border-top:none;padding-top:0">
+        <p>We handle overflow signings across all three Delaware counties, take partner invoices on <strong>Net 3</strong> terms, and can draft Delaware-compliant corporate documents on short notice. If your team needs a reliable notary bench in Delaware, let's talk.</p>
+      </div>
+      <p style="font-size:13px;color:var(--muted);margin:4px 0 0">EIN 93-3750812 · UEI V78MVZE7KGQ5 — registered for government and contracting work.</p>
+    </div>
+
+    <div class="card">
+      <h2>Book us now</h2>
+      <p class="sub">Pick a time or send your apostille documents straight over.</p>
+      <a class="cta" href="https://calendar.app.google/4g9hFnLY3WcXLisD6" target="_blank" rel="noopener">Book an appointment</a>
+      <a class="cta alt" href="https://share.hsforms.com/18NMJ1_3CTG6-7BObdcE3kwcymm9" target="_blank" rel="noopener">Start an apostille order</a>
+      <a class="cta alt" href="tel:+13023163926">Call 302-316-3926</a>
+    </div>
+
+    <div class="card contact">
+      <h2>Find us</h2>
+      <p class="sub">Serving New Castle, Kent, and Sussex counties.</p>
+      <div>
+        <span class="lbl">Dover Hub &mdash; walk-in</span>
+        <a href="https://maps.google.com/?q=846+Walker+Road+Suite+32-1+Dover+DE+19904" target="_blank" rel="noopener">846 Walker Road, Suite 32-1<br>Walker Square Office Complex, Dover, DE 19904</a><br>
+        <span style="font-size:13px;color:var(--muted)">Mon&ndash;Fri 8AM&ndash;6PM · after hours by prepaid appointment · (302) 505-1459</span>
+      </div>
+      <div>
+        <span class="lbl">Millsboro &mdash; Sussex County</span>
+        <a href="https://maps.google.com/?q=26976+Bethesda+Rd+Millsboro+DE+19966" target="_blank" rel="noopener">26976 Bethesda Rd, Millsboro, DE 19966</a>
+      </div>
+      <div>
+        <span class="lbl">Phone</span>
+        <a href="tel:+13023163926">302-316-3926</a>
+      </div>
+      <div>
+        <span class="lbl">Email</span>
+        <a href="mailto:Notary@delawaremobilesignings.com">Notary@delawaremobilesignings.com</a>
+      </div>
+      <div>
+        <span class="lbl">Web</span>
+        <a href="https://delawaremobilesignings.com" target="_blank" rel="noopener">delawaremobilesignings.com</a>
+      </div>
+      <div class="creds">
+        <span>NNA-Certified</span><span>Background-Screened</span><span>ENS-Certified</span><span>E&amp;O Insured</span>
+      </div>
+    </div>
+
+    <div class="card" style="text-align:center">
+      <p class="sub" style="margin-bottom:12px">Someone else at the booth want to sign up?</p>
+      <button type="button" class="btn secondary" id="againBtn">Add another person</button>
+    </div>
+
+    <footer>
+      Delaware Mobile Signings LLC · Dover &amp; Millsboro, Delaware<br>
+      DMS is not a law firm and does not provide legal advice.<br>
+      Cancellations require 4 hours' notice.
+    </footer>
+  </section>
+
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  var QUEUE_KEY = "dms_lead_queue_v1";
+  var entityType = "individual";
+
+  var el = function(id){ return document.getElementById(id); };
+  var formStep = el("formStep"), infoStep = el("infoStep");
+  var form = el("leadForm"), submitBtn = el("submitBtn"), formError = el("formError");
+  var bizFields = el("businessFields"), companyInput = el("company");
+  var btnInd = el("btnIndividual"), btnBiz = el("btnBusiness");
+
+  /* ---- source / campaign tagging from the QR link (?src=...&event=...) ---- */
+  var params = new URLSearchParams(window.location.search);
+  var source = params.get("src") || "qr-standdown";
+  var eventName = params.get("event") || "Delaware VA Stand Down";
+  el("eventBadge").textContent = eventName;
+
+  /* ---- individual vs business toggle ---- */
+  function setEntity(type){
+    entityType = type;
+    var isBiz = type === "business";
+    btnBiz.setAttribute("aria-pressed", String(isBiz));
+    btnInd.setAttribute("aria-pressed", String(!isBiz));
+    bizFields.classList.toggle("hidden", !isBiz);
+    companyInput.required = isBiz;
+  }
+  btnInd.addEventListener("click", function(){ setEntity("individual"); });
+  btnBiz.addEventListener("click", function(){ setEntity("business"); });
+
+  /* ---- service interest chips ---- */
+  var chips = Array.prototype.slice.call(document.querySelectorAll("#serviceChips .chip"));
+  chips.forEach(function(chip){
+    chip.addEventListener("click", function(){
+      var on = chip.getAttribute("aria-pressed") === "true";
+      chip.setAttribute("aria-pressed", String(!on));
+    });
+  });
+  function selectedServices(){
+    return chips.filter(function(c){ return c.getAttribute("aria-pressed") === "true"; })
+                .map(function(c){ return c.getAttribute("data-svc"); });
+  }
+
+  /* ---- validation ---- */
+  function isEmail(v){ return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(v); }
+  function digits(v){ return (v || "").replace(/\D/g, ""); }
+
+  function validate(data){
+    if(!data.firstName) return "Please enter your first name.";
+    if(!data.lastName) return "Please enter your last name.";
+    if(!isEmail(data.email)) return "Please enter a valid email address.";
+    var d = digits(data.phone);
+    if(d.length < 10) return "Please enter a 10-digit phone number.";
+    if(entityType === "business" && !data.company) return "Please enter your company name.";
+    return null;
+  }
+
+  /* ---- offline-safe queue: never lose a lead to bad venue wifi ---- */
+  function readQueue(){
+    try { return JSON.parse(localStorage.getItem(QUEUE_KEY) || "[]"); }
+    catch(e){ return []; }
+  }
+  function writeQueue(items){
+    try { localStorage.setItem(QUEUE_KEY, JSON.stringify(items.slice(-50))); }
+    catch(e){ /* private mode / storage blocked — nothing to do */ }
+  }
+  function enqueue(payload){
+    var q = readQueue(); q.push(payload); writeQueue(q);
+  }
+
+  function send(payload){
+    return fetch("/api/lead", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    }).then(function(res){
+      if(!res.ok) throw new Error("HTTP " + res.status);
+      return true;
+    });
+  }
+
+  function flushQueue(){
+    var q = readQueue();
+    if(!q.length) return;
+    writeQueue([]);
+    q.forEach(function(item){
+      send(item).catch(function(){ enqueue(item); });
+    });
+  }
+  window.addEventListener("online", flushQueue);
+  flushQueue();
+
+  /* ---- submit ---- */
+  form.addEventListener("submit", function(e){
+    e.preventDefault();
+    formError.classList.add("hidden");
+
+    if(el("website").value){ return; } /* honeypot: silently drop bots */
+
+    var data = {
+      firstName: el("firstName").value.trim(),
+      lastName:  el("lastName").value.trim(),
+      email:     el("email").value.trim(),
+      phone:     el("phone").value.trim(),
+      company:   el("company").value.trim(),
+      jobTitle:  el("jobTitle").value.trim(),
+      entityType: entityType,
+      services:  selectedServices(),
+      veteran:   el("veteran").checked,
+      smsOptIn:  el("smsOptIn").checked,
+      source:    source,
+      eventName: eventName,
+      capturedAt: new Date().toISOString()
+    };
+
+    var problem = validate(data);
+    if(problem){
+      formError.textContent = problem;
+      formError.classList.remove("hidden");
+      return;
+    }
+
+    submitBtn.disabled = true;
+    submitBtn.textContent = "Saving…";
+
+    /* The client always gets the info screen — delivery failures are our problem, not theirs. */
+    send(data)
+      .then(function(){ showInfo(data, true); })
+      .catch(function(){ enqueue(data); showInfo(data, false); });
+  });
+
+  function showInfo(data, delivered){
+    el("thanksName").textContent = "Thanks, " + data.firstName + "!";
+    el("offlineNote").classList.toggle("hidden", delivered);
+    el("businessCard").classList.toggle("hidden", data.entityType !== "business");
+    formStep.classList.add("hidden");
+    infoStep.classList.remove("hidden");
+    window.scrollTo(0, 0);
+  }
+
+  /* ---- "add another person" — for handing the phone/tablet down the line ---- */
+  el("againBtn").addEventListener("click", function(){
+    form.reset();
+    chips.forEach(function(c){ c.setAttribute("aria-pressed","false"); });
+    setEntity("individual");
+    submitBtn.disabled = false;
+    submitBtn.innerHTML = "See our services &rarr;";
+    infoStep.classList.add("hidden");
+    formStep.classList.remove("hidden");
+    window.scrollTo(0, 0);
+    el("firstName").focus();
+  });
+})();
+</script>
+</body>
+</html>

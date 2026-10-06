@@ -1,0 +1,13 @@
+{
+  "name": "dms-qr-intake",
+  "version": "1.0.0",
+  "private": true,
+  "description": "QR-driven client and business intake for Delaware Mobile Signings LLC",
+  "type": "module",
+  "scripts": {
+    "qr": "node tools/make-qr.mjs"
+  },
+  "devDependencies": {
+    "qrcode": "^1.5.4"
+  }
+}
