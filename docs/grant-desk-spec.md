@@ -238,8 +238,9 @@ Three slots per client — a shortlist that stays a shortlist. Storage is split 
 - the **index** rides on the client record (`title`, `funder`, `deadline`, `status`, both scores),
   so the panel renders three slots without loading three full analyses;
 - each slot's **payload** is its own document, `opportunities/<clientId>__<slot>`, holding the
-  intake metadata, the notice record and the assessment. Saving one slot never rewrites another,
-  and opening one is a single small read.
+  intake metadata, the notice record, the assessment, the corrections ledger, the conversation and
+  the revision history (§4d). Saving one slot never rewrites another, and opening one is a single
+  small read.
 
 Status runs considering → writing → submitted → awarded / declined / passed on it. Opening a slot
 restores intake, notice and assessment and jumps to the furthest tab that has data.
@@ -340,8 +341,34 @@ is told to include an entry even where a correction changed nothing. The tab sho
 readiness deltas beside it. The corrections and the change log both go into the client-facing memo,
 so the record says what was asserted and on whose say-so.
 
-Corrections and the conversation persist with their pipeline slot. Re-reading the notice from
-scratch clears both, since the ledger belongs to a reading that no longer exists.
+### Remembering it
+
+Corrections are the whole point of being able to argue with the assessment, so they must not depend
+on remembering to press Save. Three mechanisms:
+
+**The open slot autosaves.** When an opportunity is in a slot, corrections, the conversation and the
+revision history write themselves to `opportunities/<clientId>__<slot>` about a second and a half
+after the last change. The slot's *index* entry on the client record is refreshed in the same write,
+or the slot card would keep advertising a score the assessment no longer holds.
+
+The autosave compares a **signature** of what is worth saving — the corrections, the revision count,
+the scores, the recommendation, each criterion's supported points, each gate's verdict — against
+what was last written. Two consequences that matter: an unchanged slot is never rewritten, and
+*opening* a slot never triggers a save, which would otherwise be the obvious bug (load sets state,
+state change looks like an edit, and the load immediately writes itself back).
+
+**A grant not yet in a slot says so.** Before it is saved, the tab states plainly that corrections
+are held on screen only, with one-click Save to slot 1, 2 or 3. Silent loss here would be the worst
+outcome, because the work that disappears is the reasoning, not something re-derivable.
+
+**The history appends; it never replaces.** The assessment's own `changeLog` is only ever the latest
+one, so a separate `revisions` array accumulates an entry per re-score: when it ran, the corrections
+newly applied by it, the before and after scores, recommendation movement, and the change log as it
+stood. The tab renders this newest-first, and the client memo carries it, so the record shows how an
+assessment reached its current state rather than only what it currently says.
+
+Re-reading the notice from scratch clears corrections, conversation and history alike, since all
+three belong to a reading that no longer exists.
 
 ## 5. Data model
 

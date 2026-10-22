@@ -17,7 +17,11 @@ Document check · Packet · Client.
 The assessment can be argued with. Corrections holds a chat that explains and cites but cannot move
 a number, and a ledger that can: each correction is typed, and the type governs what scoring may do
 with it — a fact true today can raise the score, a thing you intend to add cannot. Every re-score
-returns a change log naming which correction moved what. See the spec's §4d.
+returns a change log naming which correction moved what.
+
+An opportunity held in a slot saves itself — corrections, the conversation and an append-only
+revision history, about a second after each change, with the slot's score index refreshed in the
+same write. One not yet in a slot says so rather than losing the work quietly. See the spec's §4d.
 
 Intake takes a notice four ways: a dropped PDF (text extracted in the page), a live search of the
 Kindora grant database, a pasted URL whose site and opportunity number are parsed out, or pasted
