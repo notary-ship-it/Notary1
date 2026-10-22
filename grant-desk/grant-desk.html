@@ -312,6 +312,39 @@ ul.marks.flags li::before { background: var(--flagink); }
 .rowedit .rowhead h4 { font-size: 15px; flex: 1; min-width: 0; }
 .fieldgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px; }
 
+/* ---------- chat + corrections ----------
+   Correction kinds are colour-coded because the kind decides how
+   scoring may use it, which is the one thing a reader must not miss. */
+.chat { display: flex; flex-direction: column; gap: 12px; }
+.chatlog { display: flex; flex-direction: column; gap: 12px; max-height: 460px; overflow-y: auto; padding-right: 4px; }
+.turn { display: flex; flex-direction: column; gap: 5px; max-width: 86%; }
+.turn.me { align-self: flex-end; align-items: flex-end; }
+.turn .who { font: 600 10px/1 "IBM Plex Mono", monospace; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3); }
+.turn .says { padding: 11px 14px; border-radius: 3px; font-size: 13.5px; line-height: 1.55; white-space: pre-wrap; }
+.turn.them .says { background: var(--surface); border: 1px solid var(--rule); border-left: 3px solid var(--navy); }
+.turn.me .says { background: var(--sunk); border: 1px solid var(--rule); }
+.turn .acts { display: flex; gap: 10px; }
+.chatbox { display: flex; flex-direction: column; gap: 8px; }
+
+.corr { border-top: 1px solid var(--rule); padding: 12px 0; display: grid; grid-template-columns: auto 1fr auto; gap: 12px; align-items: start; }
+.corr:first-of-type { border-top: 0; }
+.corr .kind { font: 600 10px/1.3 "IBM Plex Mono", monospace; letter-spacing: .07em; text-transform: uppercase; padding: 5px 7px; border: 1px solid currentColor; border-radius: 2px; white-space: nowrap; }
+.corr .kind.notice { color: var(--focus); }
+.corr .kind.client { color: var(--pass); }
+.corr .kind.commitment { color: var(--work); }
+.corr .kind.instruction { color: var(--ink-3); }
+.corr p { margin: 0; font-size: 13.5px; }
+.corr .cite { font: 500 12px/1.4 "IBM Plex Mono", monospace; color: var(--ink-3); margin-top: 3px; }
+.corr .stale { font-size: 11.5px; color: var(--work); font-weight: 600; margin-top: 4px; }
+
+.delta { display: flex; flex-wrap: wrap; gap: 10px 26px; }
+.delta .d { display: flex; flex-direction: column; gap: 2px; }
+.delta .d b { font-family: "IBM Plex Mono", monospace; font-size: 20px; font-weight: 600; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.delta .d span { font-size: 11px; letter-spacing: .09em; text-transform: uppercase; color: var(--ink-3); font-weight: 600; }
+.delta .up { color: var(--pass); }
+.delta .down { color: var(--fail); }
+.delta .same { color: var(--ink-3); }
+
 /* ---------- pipeline slots ----------
    Three slots, always all three visible so an empty one reads as
    capacity rather than as something missing. */
@@ -1152,6 +1185,101 @@ function promptAssess(client, docs, brief) {
     "- rationale is 2-5 sentences. If NO-GO, the first sentence states plainly why to walk away.",
     "- If the notice states a minimum score or a historical funded score, say in competitiveRead how the projected score compares to it."
   ].join("\n");
+}
+
+/* ==================================================================
+   4b. CORRECTIONS
+   The assessment is a reading, and a reading can be wrong. A
+   correction is the consultant asserting a fact, and its KIND decides
+   what scoring may do with it — which is the whole integrity of this
+   feature. A thing you intend to add is not a thing a reviewer can
+   see, so it can never raise today's score.
+   ================================================================== */
+var CORRECTION_KINDS = [
+  { key: "notice", label: "What the notice actually says",
+    hint: "Fixes a misreading of the funder's document. Cite the section — it overrides the earlier reading.",
+    effect: "Re-reads the rule. Can remove a gate or unlock a criterion." },
+  { key: "client", label: "What the client already has or does",
+    hint: "A fact that is true today and could be evidenced now.",
+    effect: "Can raise the score, because a reviewer could see it." },
+  { key: "commitment", label: "What we will add before the deadline",
+    hint: "Work not done yet — a letter to obtain, a plan to write.",
+    effect: "Cannot raise today's score. Raises reachable points only." },
+  { key: "instruction", label: "How to weigh something",
+    hint: "A disagreement with the judgment, or context for it.",
+    effect: "Adjusts the reasoning. Cannot invent evidence." }
+];
+
+function kindLabel(k) {
+  var m = CORRECTION_KINDS.filter(function (x) { return x.key === k; })[0];
+  return m ? m.label : k;
+}
+
+function correctionsBlock(corrections) {
+  var list = asArr(corrections);
+  if (!list.length) return "";
+  var L = ["", "CORRECTIONS FROM THE CONSULTANT — these are authoritative and override your earlier reading:"];
+  list.forEach(function (c, i) {
+    L.push((i + 1) + ". [" + String(c.kind || "instruction").toUpperCase() + "] " + txt(c.text) +
+      (isStr(c.citation) ? "  (cited: " + txt(c.citation) + ")" : ""));
+  });
+  L.push("");
+  L.push("How to use each kind — these rules are not negotiable:");
+  L.push("- NOTICE: this is what the funder's document actually says. It replaces your earlier reading of that rule, even if the notice text you were given reads otherwise. Re-open any gate or criterion that turned on the old reading. Do not argue with it.");
+  L.push("- CLIENT: a fact that is true today and can be evidenced now. It MAY raise supportedPoints and MAY clear a gate.");
+  L.push("- COMMITMENT: work not yet done. It MUST NOT raise supportedPoints and MUST NOT clear a gate, because a reviewer reading the file today would not find it. Put it in liftPoints and name it in howToGainPoints. This is the most important rule here: scoring a promise as evidence makes every score worthless.");
+  L.push("- INSTRUCTION: adjusts your reasoning or weighting. It cannot create evidence that does not exist.");
+  return L.join("\n");
+}
+
+function promptRescore(client, docs, brief, corrections, previous) {
+  var base = promptAssess(client, docs, brief);
+  var prev = previous ? [
+    "",
+    "YOUR PREVIOUS ASSESSMENT (for comparison — not authoritative; the corrections are):",
+    clip(JSON.stringify({
+      recommendation: previous.recommendation,
+      eligibility: asArr(previous.eligibility).map(function (g) { return { requirement: g.requirement, met: g.met, blocking: g.blocking }; }),
+      rubricScoring: asArr(previous.rubricScoring).map(function (r) { return { criterion: r.criterion, maxPoints: r.maxPoints, supportedPoints: r.supportedPoints }; }),
+      readinessTotal: previous.readinessTotal,
+      projectedScore: previous.projectedScore
+    }), 8000)
+  ].join("\n") : "";
+  return [
+    base,
+    correctionsBlock(corrections),
+    prev,
+    "",
+    "Additionally, add a changeLog to your JSON: changeLog:[{what, from, to, becauseOf}] — one entry for every gate, criterion score or recommendation that moved against your previous assessment, where becauseOf names the correction number that moved it. If a correction changed nothing, say so in an entry with from and to equal and explain why in what. Never silently change a score: anything that moved must appear in the changeLog."
+  ].filter(Boolean).join("\n");
+}
+
+function promptChat(client, brief, assess, corrections, turns) {
+  var lead = [
+    "You are a grant consultant's second pair of eyes on one funding notice and one assessment of a client against it. The consultant is challenging the assessment, and they are often right: they know the client and they have read the notice.",
+    "",
+    "THE NOTICE (as extracted):",
+    clip(JSON.stringify(brief), 22000),
+    "",
+    "THE CLIENT:",
+    clip(JSON.stringify(client), 8000),
+    "",
+    "THE CURRENT ASSESSMENT:",
+    clip(JSON.stringify(assess), 14000),
+    correctionsBlock(corrections),
+    "",
+    "How to answer:",
+    "- Answer the question asked, in 1-4 short paragraphs of plain prose. No JSON, no headings, no bullet lists unless you are listing more than three things.",
+    "- Quote the notice's own words when the question is about what the notice permits, and cite the section. If the notice does not address it, say so plainly rather than inferring a restriction. Reading a silence as a prohibition is the most common way this assessment goes wrong.",
+    "- When the consultant tells you the notice allows something you had read as disallowed, check the notice text you were given. If it supports them, say so directly and say what the assessment got wrong and which criteria or gates were affected. If it genuinely does not appear in what you were given, say that the extraction may have missed it and that they should file it as a correction citing the section — do not pretend to see text you were not shown.",
+    "- Distinguish carefully between what the FUNDER allows and what the CLIENT has. Those are different questions and conflating them is what produced the error you are being asked about.",
+    "- If something they tell you would change the score, say which way and roughly how much, and tell them to file it as a correction so the re-score picks it up. Be explicit about whether what they have described is a fact that is true today (which can raise the score) or work still to be done (which cannot, and only raises the reachable points).",
+    "- Never flatter. If they are wrong about what the notice says, say so and quote it.",
+    "- You cannot change the score from this conversation. Only a filed correction and a re-score do that."
+  ].join("\n");
+  return [{ role: "user", content: lead }].concat(asArr(turns).map(function (t) {
+    return { role: t.role === "assistant" ? "assistant" : "user", content: String(t.content || "") };
+  }));
 }
 
 function promptDocCheck(kind, label, content, computed, brief, criterion) {
@@ -2333,6 +2461,173 @@ function matchDoc(name, docs) {
   return bestScore >= 0.5 ? best : null;
 }
 
+/* ---------- 4b. Corrections and chat ---------- */
+function totalsOf(a) {
+  var rows = asArr(a && a.rubricScoring);
+  var got = num(a && a.projectedScore);
+  if (got === null) got = rows.reduce(function (t, r) { return t + (num(r.supportedPoints) || 0); }, 0);
+  var max = num(a && a.projectedMax) || rows.reduce(function (t, r) { return t + (num(r.maxPoints) || 0); }, 0);
+  var ready = num(a && a.readinessTotal);
+  if (ready === null) ready = READINESS_DIMS.reduce(function (t, d) { return t + (num((a && a.readinessScores || {})[d.key]) || 0); }, 0);
+  return { got: got, max: max, ready: ready, rec: txt(a && a.recommendation) || "—" };
+}
+
+function Delta(props) {
+  var before = props.before, after = props.after;
+  function row(label, b, aa, suffix) {
+    var d = (num(aa) || 0) - (num(b) || 0);
+    var cls = d > 0 ? "up" : (d < 0 ? "down" : "same");
+    return h("div.d", null,
+      h("b", { className: cls }, (num(aa) === null ? "—" : num(aa)) + (suffix || ""),
+        d !== 0 ? h("span", { style: { fontSize: "13px", marginLeft: "6px" } }, (d > 0 ? "+" : "") + d) : null),
+      h("span", null, label));
+  }
+  return h("div.delta", null,
+    row("Projected score", before.got, after.got, "/" + (after.max || "—")),
+    row("Readiness", before.ready, after.ready, "/100"),
+    h("div.d", null,
+      h("b", { className: before.rec === after.rec ? "same" : "up", style: { fontSize: "14px" } }, after.rec),
+      h("span", null, before.rec === after.rec ? "Recommendation (unchanged)" : "Recommendation (was " + before.rec + ")"))
+  );
+}
+
+function CorrectionsTab(props) {
+  var st = props.state, set = props.set;
+  var list = asArr(props.corrections);
+  var turns = asArr(props.turns);
+  var a = props.assess || {};
+  var chatting = props.phase === "chat";
+  var rescoring = props.phase === "rescore";
+  var criteria = asArr((props.brief || {}).reviewCriteria);
+  var kindMeta = CORRECTION_KINDS.filter(function (k) { return k.key === st.kind; })[0] || CORRECTION_KINDS[0];
+
+  return h("div.stack", null,
+    h("div.stack-sm", null,
+      h("p.eyebrow", null, "When the read is wrong"),
+      h("h2", { style: { fontSize: "25px" } }, "Argue with the assessment"),
+      h("p.lede", null,
+        "The score is a reading of two documents, and a reading can be wrong — most often by confusing what the ",
+        h("strong", null, "funder allows"),
+        " with what the ",
+        h("strong", null, "client has"),
+        ", or by reading a silence as a prohibition. Ask about it here, then file what you know as a correction and re-score.")
+    ),
+
+    h(Panel, { title: "Ask about this notice or this score", note: turns.length ? Math.ceil(turns.length / 2) + " exchanges" : "Nothing asked yet" },
+      h("div.chat", null,
+        turns.length
+          ? h("div.chatlog", null, turns.map(function (t, i) {
+              var mine = t.role !== "assistant";
+              return h("div", { key: i, className: "turn " + (mine ? "me" : "them") },
+                h("span.who", null, mine ? "You" : "Claude"),
+                h("div.says", null, t.content),
+                !mine && isStr(t.content)
+                  ? h("div.acts", null,
+                      h("button.link", { onClick: function () { set({ draft: t.content, formOpen: true }); } }, "File this as a correction"))
+                  : null);
+            }))
+          : h("div.notice.plain", null,
+              h("strong", null, "Try the question you actually have. "),
+              "\u201cThe notice allows refurbishment of a building the applicant already owns \u2014 why did you treat this as a new purchase?\u201d is a better opening than \u201cis this eligible\u201d, because it names the confusion."),
+        chatting
+          ? h("div.turn.them", null, h("span.who", null, "Claude"),
+              h("div.says", null, props.streamText || "Thinking\u2026"))
+          : null,
+        h("div.chatbox", null,
+          h("textarea", { id: "chat-in", rows: 3, value: st.msg, disabled: chatting,
+            placeholder: "What did it get wrong, or what do you want to check?",
+            onChange: function (e) { set({ msg: e.target.value }); } }),
+          h("div", { style: { display: "flex", gap: "10px", flexWrap: "wrap", alignItems: "center" } },
+            h("button.btn", { disabled: !isStr(st.msg) || chatting || !props.assess, onClick: props.onSend },
+              chatting ? "Asking\u2026" : "Ask"),
+            chatting ? h("button.btn.ghost.sm", { onClick: props.onStop }, "Stop") : null,
+            turns.length ? h("button.link", { onClick: props.onClearChat }, "Clear the conversation") : null,
+            h("span", { className: "eyebrow", style: { marginLeft: "auto", color: "var(--ink-3)" } },
+              "Talking changes nothing \u2014 only a correction does")))
+      )),
+
+    h(Panel, { title: "Corrections", note: list.length + (list.length === 1 ? " on file" : " on file") },
+      h("div.stack-sm", null,
+        list.length
+          ? h("div", null, list.map(function (c, i) {
+              return h("div.corr", { key: c.id || i },
+                h("span", { className: "kind " + (c.kind || "instruction") }, (c.kind || "instruction")),
+                h("div", null,
+                  h("p", null, txt(c.text) || "(empty)"),
+                  isStr(c.citation) ? h("p.cite", null, c.citation) : null,
+                  !c.appliedAt ? h("p.stale", null, "Not yet in the score \u2014 re-score to apply it") : null),
+                h("button.link", { onClick: function () { props.onRemove(c.id); } }, "Remove"));
+            }))
+          : h("p.null", null, "Nothing filed. A correction is you asserting a fact — it overrides the reading."),
+
+        st.formOpen
+          ? h("div.rowedit", null,
+              h("div.rowhead", null, h("h4", null, "File a correction")),
+              h(Field, { id: "corr-kind", label: "What kind", value: st.kind,
+                options: CORRECTION_KINDS.map(function (k) { return k.key; }),
+                onChange: function (v) { set({ kind: v }); } }),
+              h("div.notice.plain", null,
+                h("strong", null, kindMeta.label + ". "), kindMeta.hint, " ",
+                h("em", null, kindMeta.effect)),
+              h(Field, { id: "corr-text", label: "What is true", multiline: true, rows: 4, value: st.draft,
+                placeholder: st.kind === "notice"
+                  ? "e.g. The notice allows refurbishment of a facility the applicant already owns; it does not require a new purchase."
+                  : (st.kind === "commitment"
+                      ? "e.g. We will obtain a signed letter of commitment from the partner before the deadline."
+                      : "e.g. The pastor already owns the church building outright."),
+                onChange: function (v) { set({ draft: v }); } }),
+              st.kind === "notice"
+                ? h(Field, { id: "corr-cite", label: "Section it says it in", value: st.citation,
+                    placeholder: "e.g. \u00a7III.B.2, or \u201cEligible Activities\u201d",
+                    onChange: function (v) { set({ citation: v }); } })
+                : null,
+              criteria.length
+                ? h(Field, { id: "corr-crit", label: "Criterion it bears on (optional)", value: st.criterion,
+                    options: [""].concat(criteria.map(function (c) { return txt(c.criterion) || ""; })),
+                    onChange: function (v) { set({ criterion: v }); } })
+                : null,
+              h("div", { style: { display: "flex", gap: "10px", flexWrap: "wrap" } },
+                h("button.btn", { disabled: !isStr(st.draft), onClick: props.onFile }, "Add to the ledger"),
+                h("button.btn.ghost", { onClick: function () { set({ formOpen: false, draft: "", citation: "" }); } }, "Cancel")))
+          : h("div", null, h("button.btn.ghost", { onClick: function () { set({ formOpen: true }); } }, "File a correction")),
+
+        list.length
+          ? h("div", { style: { borderTop: "1px solid var(--rule)", paddingTop: "14px", display: "flex", gap: "12px", flexWrap: "wrap", alignItems: "center" } },
+              h("button.btn", { disabled: rescoring || !props.brief, onClick: props.onRescore },
+                rescoring ? "Re-scoring\u2026" : "Re-score with these corrections"),
+              rescoring ? h("button.btn.ghost.sm", { onClick: props.onStop }, "Stop") : null,
+              h("span", { className: "eyebrow", style: { color: "var(--ink-3)" } },
+                "Re-reads every gate and criterion against the ledger"))
+          : null,
+        props.error ? h("div.notice.bad", null, props.error) : null
+      )),
+
+    props.lastDelta
+      ? h(Panel, { title: "What the re-score moved", note: "Against the previous assessment" },
+          h("div.stack-sm", null,
+            h(Delta, { before: props.lastDelta.before, after: props.lastDelta.after }),
+            asArr(a.changeLog).length
+              ? h("div.tablewrap", { style: { marginTop: "8px" } },
+                  h("table.grid", null,
+                    h("thead", null, h("tr", null, h("th", null, "What"), h("th", null, "From"), h("th", null, "To"), h("th", null, "Because of"))),
+                    h("tbody", null, asArr(a.changeLog).map(function (c, i) {
+                      var moved = txt(c.from) !== txt(c.to);
+                      return h("tr", { key: i },
+                        h("td", null, txt(c.what)),
+                        h("td", { style: { color: "var(--ink-3)" } }, txt(c.from) || "—"),
+                        h("td", { style: { color: moved ? "var(--ink)" : "var(--ink-3)", fontWeight: moved ? 600 : 400 } }, txt(c.to) || "—"),
+                        h("td", { style: { color: "var(--ink-2)" } }, txt(c.becauseOf) || "—"));
+                    }))))
+              : h("p.null", null, "The re-score reported no itemised changes."),
+            h("div", null, h("button.btn.ghost.sm", { onClick: function () { props.go("rubric"); } }, "See the rubric"))))
+      : null,
+
+    h("div.notice.plain", null,
+      h("strong", null, "Why the kinds matter. "),
+      "A fact that is true today can raise the score, because a reviewer could see it. A thing you intend to add cannot — it only moves the reachable points, and the re-score is instructed to refuse it as evidence. That is deliberate: a score that counts promises is a score that tells you nothing.")
+  );
+}
+
 /* ---------- 5. What is still needed ---------- */
 function NeedsTab(props) {
   var a = props.assess || {};
@@ -2566,7 +2861,7 @@ function CheckTab(props) {
 }
 
 /* ---------- 7. Packet ---------- */
-function buildMemo(client, brief, assess, runway, docs, intake) {
+function buildMemo(client, brief, assess, runway, docs, intake, corrections) {
   var b = brief || {}, a = assess || {}, d = b.dates || {};
   var L = [];
   function line(s) { L.push(s === undefined ? "" : s); }
@@ -2659,6 +2954,28 @@ function buildMemo(client, brief, assess, runway, docs, intake) {
     list.forEach(function (x) { line("- " + x.name + ": " + x.status + (isStr(x.note) ? " — " + x.note : "")); });
     line();
   });
+  var corrs = asArr(corrections);
+  if (corrs.length) {
+    line("## Corrections applied to this assessment");
+    line();
+    line("These were asserted by the preparer and override the initial reading of the notice.");
+    line();
+    corrs.forEach(function (c) {
+      line("- **" + String(c.kind || "instruction").toUpperCase() + "** — " + txt(c.text) +
+        (isStr(c.citation) ? " _(cited: " + txt(c.citation) + ")_" : "") +
+        (c.appliedAt ? "" : " _(filed but not yet re-scored)_"));
+    });
+    line();
+    if (asArr(a.changeLog).length) {
+      line("| What moved | From | To | Because of |");
+      line("| --- | --- | --- | --- |");
+      asArr(a.changeLog).forEach(function (c) {
+        line("| " + (txt(c.what) || "").replace(/\|/g, "/") + " | " + (txt(c.from) || "—") +
+          " | " + (txt(c.to) || "—") + " | " + (txt(c.becauseOf) || "—").replace(/\|/g, "/") + " |");
+      });
+      line();
+    }
+  }
   if (asArr(b.redFlags).length) {
     line("## Flags from the notice");
     line();
@@ -2680,8 +2997,8 @@ function PacketTab(props) {
   var rw = props.runway;
   var blockers = asArr(a.missingItems).filter(function (i) { return i.blocksSubmission; });
   var memo = useMemo(function () {
-    return buildMemo(props.client, props.brief, props.assess, rw, props.docs, props.intake);
-  }, [props.client, props.brief, props.assess, rw, props.docs, props.intake]);
+    return buildMemo(props.client, props.brief, props.assess, rw, props.docs, props.intake, props.corrections);
+  }, [props.client, props.brief, props.assess, rw, props.docs, props.intake, props.corrections]);
 
   var gates = asArr(a.eligibility).filter(function (g) { return g.met === false && g.blocking; });
   var ready = !gates.length && !blockers.length && rw.verdict !== "infeasible";
@@ -2997,10 +3314,11 @@ var TABS = [
   { id: "notice",  n: "2", label: "Notice" },
   { id: "gates",   n: "3", label: "Eligibility & runway" },
   { id: "rubric",  n: "4", label: "Rubric" },
-  { id: "needs",   n: "5", label: "What's needed" },
-  { id: "check",   n: "6", label: "Document check" },
-  { id: "packet",  n: "7", label: "Packet" },
-  { id: "client",  n: "8", label: "Client" }
+  { id: "correct", n: "5", label: "Corrections" },
+  { id: "needs",   n: "6", label: "What's needed" },
+  { id: "check",   n: "7", label: "Document check" },
+  { id: "packet",  n: "8", label: "Packet" },
+  { id: "client",  n: "9", label: "Client" }
 ];
 
 function freshDocs(status) {
@@ -3062,6 +3380,12 @@ function App() {
   var sT = useState({ hbHits: [], hbLoading: false, hbLoaded: false, hbErr: null,
                       csvParsed: null, csvNote: "" }), importState = sT[0], setImportStateRaw = sT[1];
   var sU = useState({ kindora: false, honeybook: false }), servers = sU[0], setServers = sU[1];
+  var sV = useState([]), corrections = sV[0], setCorrections = sV[1];
+  var sW = useState([]), chatTurns = sW[0], setChatTurns = sW[1];
+  var sX = useState(""), streamText = sX[0], setStreamText = sX[1];
+  var sY = useState(null), lastDelta = sY[0], setLastDelta = sY[1];
+  var sZ = useState({ msg: "", draft: "", kind: "notice", citation: "", criterion: "", formOpen: false }),
+      corrForm = sZ[0], setCorrFormRaw = sZ[1];
 
   var sampleRef = useRef(null);
   var dbRef = useRef(null);
@@ -3180,6 +3504,90 @@ function App() {
   }
 
   function setImportState(patch) { setImportStateRaw(Object.assign({}, importState, patch)); }
+  function setCorrForm(patch) { setCorrFormRaw(Object.assign({}, corrForm, patch)); }
+
+  /* --- arguing with the assessment ---------------------------------
+     Chat is read-only on purpose: it can explain and it can be wrong
+     out loud, but it cannot move a number. Only a filed correction
+     plus a re-score does that, so every score change has a written
+     cause behind it. */
+  function sendChat() {
+    var sample = sampleRef.current;
+    if (!sample) { setError(ERR_COPY.not_granted); return; }
+    var msg = corrForm.msg.trim();
+    if (!msg || !assess) return;
+
+    var ctl = new AbortController();
+    abortRef.current = ctl;
+    var nextTurns = chatTurns.concat([{ role: "user", content: msg }]);
+    setChatTurns(nextTurns);
+    setCorrForm({ msg: "" });
+    setPhase("chat"); setStreamText(""); setError(null);
+
+    sample(promptChat(client, brief, assess, corrections, nextTurns), {
+      signal: ctl.signal, modelTier: "complex", cache: false,
+      onText: function (u) { setStreamText(u.text); }
+    }).then(function (res) {
+      if (ctl.signal.aborted) return;
+      setChatTurns(nextTurns.concat([{ role: "assistant", content: res.text }]));
+      setStreamText(""); setPhase(null);
+    }).catch(function (e) {
+      setPhase(null);
+      var partial = e && e.text;
+      if (partial) setChatTurns(nextTurns.concat([{ role: "assistant", content: partial + "\n\n[cut short]" }]));
+      setStreamText("");
+      if (e && e.code === "cancelled") { setError(null); return; }
+      setError(errCopy(e));
+    });
+  }
+
+  function fileCorrection() {
+    var text = corrForm.draft.trim();
+    if (!text) return;
+    var entry = {
+      id: "x" + Math.random().toString(36).slice(2, 9),
+      kind: corrForm.kind || "instruction",
+      text: text,
+      citation: corrForm.kind === "notice" ? (corrForm.citation || "") : "",
+      criterion: corrForm.criterion || "",
+      createdAt: new Date().toISOString(),
+      appliedAt: null
+    };
+    setCorrections(corrections.concat([entry]));
+    setCorrForm({ formOpen: false, draft: "", citation: "", criterion: "" });
+  }
+
+  function removeCorrection(id) {
+    setCorrections(corrections.filter(function (c) { return c.id !== id; }));
+  }
+
+  function rescore() {
+    var sample = sampleRef.current;
+    if (!sample) { setError(ERR_COPY.not_granted); return; }
+    if (!brief || !corrections.length) return;
+
+    var ctl = new AbortController();
+    abortRef.current = ctl;
+    var before = totalsOf(assess);
+    setPhase("rescore"); setStreamText(""); setError(null);
+
+    sample.json(promptRescore(client, docs, brief, corrections, assess), {
+      signal: ctl.signal, modelTier: "complex", cache: false,
+      onText: function (u) { setStreamChars(u.text.length); }
+    }).then(function (next) {
+      if (ctl.signal.aborted || !next) return;
+      var stamp = new Date().toISOString();
+      setCorrections(corrections.map(function (c) { return Object.assign({}, c, { appliedAt: stamp }); }));
+      setAssess(next);
+      setLastDelta({ before: before, after: totalsOf(next) });
+      setPhase(null);
+    }).catch(function (e) {
+      setPhase(null);
+      if (e && e.code === "cancelled") { setError(null); return; }
+      setError(errCopy(e));
+    });
+  }
+
 
   var pipeline = asArr(client.pipeline);
 
@@ -3217,6 +3625,7 @@ function App() {
     if (!db) { setPipeErr("Saved on screen only — storage is unavailable on this view."); return; }
     db.doc("opportunities/" + key).set({
       clientId: client.id, slot: String(slot), intake: intake, brief: brief, assess: assess,
+      corrections: corrections, chatTurns: chatTurns.slice(-20),
       savedAt: entry.savedAt
     }).then(function () { saveAll(updatedClients); }, function () {
       setPipeErr("The notice and scores could not be stored. The slot is on screen but will not come back later.");
@@ -3236,6 +3645,9 @@ function App() {
       if (d.intake) setIntake(Object.assign({ noticeText: "", funder: "", portal: "", sourceUrl: "", foundVia: "" }, d.intake));
       setBrief(d.brief || null);
       setAssess(d.assess || null);
+      setCorrections(Array.isArray(d.corrections) ? d.corrections : []);
+      setChatTurns(Array.isArray(d.chatTurns) ? d.chatTurns : []);
+      setLastDelta(null);
       setLiveKey(entry.oppKey);
       setError(null);
       setTab(d.assess ? "gates" : (d.brief ? "notice" : "intake"));
@@ -3417,6 +3829,7 @@ function App() {
     var ctl = new AbortController();
     abortRef.current = ctl;
     setError(null); setBrief(null); setAssess(null); setStreamChars(0);
+    setCorrections([]); setChatTurns([]); setLastDelta(null);
 
     var chunks = chunkText(text);
     setPass({ done: 0, total: chunks.length });
@@ -3567,6 +3980,14 @@ function App() {
   } else if (tab === "rubric") {
     body = assess ? h(RubricTab, { assess: assess, brief: brief })
                   : h(Empty, { go: setTab, what: "assessment" });
+  } else if (tab === "correct") {
+    body = assess ? h(CorrectionsTab, {
+      state: corrForm, set: setCorrForm, corrections: corrections, turns: chatTurns,
+      assess: assess, brief: brief, phase: phase, streamText: streamText, error: error,
+      lastDelta: lastDelta, go: setTab,
+      onSend: sendChat, onStop: stop, onFile: fileCorrection, onRemove: removeCorrection,
+      onRescore: rescore, onClearChat: function () { setChatTurns([]); setStreamText(""); }
+    }) : h(Empty, { go: setTab, what: "assessment" });
   } else if (tab === "needs") {
     body = assess ? h(NeedsTab, { assess: assess, brief: brief, docs: docs })
                   : h(Empty, { go: setTab, what: "assessment" });
@@ -3579,6 +4000,7 @@ function App() {
   } else if (tab === "packet") {
     body = h(PacketTab, {
       brief: brief, assess: assess, client: client, docs: docs, intake: intake, runway: runway,
+      corrections: corrections,
       downloadsReady: downloadsReady, onSaveMemo: saveMemo, onCopyMemo: copyMemo, copied: copied
     });
   } else {
@@ -3604,7 +4026,7 @@ function App() {
     h("nav.rail", null,
       h("div.rail-in", { role: "tablist" }, TABS.map(function (t) {
         var locked = (t.id === "notice" && !brief) ||
-                     ((t.id === "gates" || t.id === "rubric" || t.id === "needs") && !assess);
+                     ((t.id === "gates" || t.id === "rubric" || t.id === "needs" || t.id === "correct") && !assess);
         return h("button.tab", {
           key: t.id, role: "tab", id: "tab-" + t.id, type: "button",
           "aria-selected": tab === t.id ? "true" : "false",

@@ -11,8 +11,13 @@ checks budgets and narratives before they go into the package.
 
 Published as **DMS Grant Desk**: https://claude.ai/artifact/Ptb7uEy4tdJXXkyFMgsiif
 
-Eight tabs: Intake · Notice · Eligibility & runway · Rubric · What's needed · Document check ·
-Packet · Client.
+Nine tabs: Intake · Notice · Eligibility & runway · Rubric · Corrections · What's needed ·
+Document check · Packet · Client.
+
+The assessment can be argued with. Corrections holds a chat that explains and cites but cannot move
+a number, and a ledger that can: each correction is typed, and the type governs what scoring may do
+with it — a fact true today can raise the score, a thing you intend to add cannot. Every re-score
+returns a change log naming which correction moved what. See the spec's §4d.
 
 Intake takes a notice four ways: a dropped PDF (text extracted in the page), a live search of the
 Kindora grant database, a pasted URL whose site and opportunity number are parsed out, or pasted

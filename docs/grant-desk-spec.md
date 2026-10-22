@@ -295,6 +295,54 @@ Either way, an import brings what a CRM knows — who the client is — and noth
 UEI, SAM status and the document registry all arrive `PENDING`, which is precisely the list to go
 and ask the client for.
 
+## 4d. Arguing with the assessment
+
+The first three versions had a dead end: the assessment was a one-shot reading with no way to
+correct it. The failure that exposed it is worth recording because it is the *characteristic*
+failure of this kind of tool, not a one-off bug.
+
+A notice allowed refurbishment of a facility the applicant already owned. The assess pass read it
+as new acquisition only, concluded a pastor with an existing church was ineligible, and returned
+NO-GO. Two distinct errors, both structural:
+
+1. **Reading a silence as a prohibition.** The notice did not say "new purchase only"; it simply
+   did not dwell on existing facilities, while elsewhere allowing refurbishment.
+2. **Conflating what the funder allows with what the client has.** Owning the building was treated
+   as a disqualifier rather than as an asset.
+
+So the Corrections tab exists, and it has two halves.
+
+**A chat that cannot move a number.** Ask why a gate failed or what the notice permits. The prompt
+is instructed to quote the notice and cite the section, to say plainly when the notice is silent
+rather than inferring a restriction, to keep "what the funder allows" and "what the client has"
+apart as separate questions, and not to flatter — if the consultant is wrong about the text, it
+says so and quotes it. It is also told it cannot change the score from the conversation.
+
+**A ledger that can.** A correction is the consultant *asserting a fact*, and its **kind** decides
+what scoring may do with it:
+
+| Kind | Means | What scoring may do |
+| --- | --- | --- |
+| `notice` | what the funder's document actually says | overrides the earlier reading; re-opens any gate or criterion that turned on it |
+| `client` | a fact true today, evidenceable now | **may** raise supported points and clear a gate |
+| `commitment` | work not yet done | **must not** raise supported points or clear a gate — raises reachable points only |
+| `instruction` | how to weigh something | adjusts reasoning; cannot create evidence |
+
+**The `commitment` rule is the integrity of the whole tool.** Everything else in the Grant Desk
+rests on scoring only what a reviewer could see today (§1, rule 3). If "we'll get a letter of
+commitment" silently became supported points, every score it produces would be worthless, and
+worse, worthless in the flattering direction. So the re-score prompt refuses it as evidence in
+terms, and the UI states the effect of each kind before you file it.
+
+**Nothing changes silently.** The re-score returns a `changeLog` of `{what, from, to, becauseOf}`,
+one entry per gate, score or recommendation that moved, naming the correction that moved it — and
+is told to include an entry even where a correction changed nothing. The tab shows the score and
+readiness deltas beside it. The corrections and the change log both go into the client-facing memo,
+so the record says what was asserted and on whose say-so.
+
+Corrections and the conversation persist with their pipeline slot. Re-reading the notice from
+scratch clears both, since the ledger belongs to a reading that no longer exists.
+
 ## 5. Data model
 
 One record per client, stored as `grantdesk/clients` in the artifact's own store:
@@ -333,14 +381,17 @@ order for the existing product.
 3. **It does not predict award decisions.** It measures what the file evidences against the
    published rubric. Reviewers, panels and program priorities are not modelled and should never
    be claimed to be.
-4. **Extraction quality tracks input quality.** A clean NOFO extracts well. A scanned PDF pasted
+4. **The first reading is often wrong about permissions**, typically by reading a silence in the
+   notice as a prohibition. Treat a NO-GO on an eligibility *interpretation* as a prompt to open
+   the Corrections tab and check the text, not as an answer. See §4d.
+5. **Extraction quality tracks input quality.** A clean NOFO extracts well. A scanned PDF pasted
    as broken text extracts badly, and the desk will not know it did.
-5. **First sheet only** on a workbook in the page. The skill reads every sheet — use it when the
+6. **First sheet only** on a workbook in the page. The skill reads every sheet — use it when the
    match detail hides on sheet two.
-6. **Scanned PDFs need OCR.** Text PDFs extract in the page; image-only ones are detected and
+7. **Scanned PDFs need OCR.** Text PDFs extract in the page; image-only ones are detected and
    refused rather than analyzed as an empty string.
-7. **No URL fetching**, ever, in the page — see §4b.
-8. **Nothing is filed anywhere.** The desk assesses; a human submits.
+8. **No URL fetching**, ever, in the page — see §4b.
+9. **Nothing is filed anywhere.** The desk assesses; a human submits.
 
 ---
 
