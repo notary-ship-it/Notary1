@@ -1,0 +1,18 @@
+{
+  "client_name": "",
+  "slug": "",
+  "status": "active",
+  "greeting": "Hi <Client Name> team,",
+  "recipients": { "to": ["notary@delawaremobilesignings.com"], "cc": [] },
+  "schedule": { "day": "Monday", "time": "09:00", "timezone": "America/New_York" },
+  "criteria": {
+    "focus_areas": [],
+    "geography": "",
+    "org_type": "",
+    "award_size": "",
+    "funding_sources": ["federal", "foundation"],
+    "exclusions": []
+  },
+  "start_date": "",
+  "resources_used": []
+}

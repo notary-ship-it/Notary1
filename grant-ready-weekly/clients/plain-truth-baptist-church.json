@@ -1,0 +1,21 @@
+{
+  "client_name": "Plain Truth Baptist Church",
+  "slug": "plain-truth-baptist-church",
+  "status": "active",
+  "greeting": "Hi Plain Truth Baptist Church team,",
+  "recipients": {
+    "to": ["notary@delawaremobilesignings.com"],
+    "cc": ["stevensdon60@yahoo.com", "lcrawford44@aol.com"]
+  },
+  "schedule": { "day": "Monday", "time": "09:00", "timezone": "America/New_York" },
+  "criteria": {
+    "focus_areas": ["community and social services", "historic preservation"],
+    "geography": "Delaware / federal",
+    "org_type": "Church / 501(c)(3) with active SAM.gov registration",
+    "award_size": "",
+    "funding_sources": ["federal", "foundation"],
+    "exclusions": []
+  },
+  "start_date": "2026-10-12",
+  "resources_used": ["Keep Your Core Documents in One Place", "Put Your SAM.gov Renewal on the Calendar"]
+}
