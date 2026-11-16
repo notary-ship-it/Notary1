@@ -1,0 +1,39 @@
+# Reference profile copied from the existing Plain Truth routine.
+# status is managed-elsewhere so this system does NOT send a second email.
+# To move Plain Truth onto this system: set status to active AND turn off the old routine.
+
+client_name: "Plain Truth Baptist Church, Inc."
+greeting_name: "Plain Truth Baptist Church"
+status: managed-elsewhere
+started_on: 2026-11-02
+stopped_on:
+
+email:
+  to: ["notary@delawaremobilesignings.com"]
+  cc: ["stevensdon60@yahoo.com", "lcrawford44@aol.com"]
+  send_day: Monday
+
+profile:
+  org_type: "church"
+  state: "DE"
+  county: "Kent"
+  city: "Hartly"
+  nonprofit_501c3: true
+  sam_registered: true
+  sam_expiration: ""
+
+criteria:
+  focus_areas:
+    - "community / social services"
+    - "historic preservation"
+  keywords: ["church", "faith-based", "community outreach"]
+  award_min: 0
+  award_max: 0          # 0 = no limit
+  funder_types: ["federal", "state", "private foundation", "corporate"]
+  exclude: []
+  max_opportunities: 5
+
+notes: |
+  Pastor Lionel Crawford and Don (Donnie) Stevens. Pre-application submitted to
+  Jehovah Jireh Foundation Nov 10, 2026. Pastor picked Google Ad Grants plus options
+  3, 4 and 7 from the Nov 9 options list.

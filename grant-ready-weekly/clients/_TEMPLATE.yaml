@@ -1,0 +1,36 @@
+# Copy this file to clients/<client-slug>.yaml for each new subscriber.
+# Files starting with "_" are ignored by the routine.
+
+client_name: "Example Organization, Inc."     # legal name
+greeting_name: "Example Organization"          # used in "Hi ___ team,"
+status: active                                 # active | paused | stopped | managed-elsewhere
+started_on: 2026-11-16
+stopped_on:                                    # fill in when the client cancels
+
+email:
+  to: ["notary@delawaremobilesignings.com"]    # the original routine sends To you...
+  cc: ["contact1@example.org"]                 # ...and CCs the client contacts
+  send_day: Monday
+
+profile:
+  org_type: "church"                            # church | nonprofit | small business | school | other
+  state: "DE"
+  county: "Kent"
+  city: "Hartly"
+  nonprofit_501c3: true
+  sam_registered: true                          # yes/no only; never store UEI/EIN numbers here
+  sam_expiration: ""                            # YYYY-MM-DD if known, used for renewal reminders
+
+criteria:
+  focus_areas:                                  # what grants should match
+    - "community / social services"
+    - "historic preservation"
+  keywords: ["food pantry", "youth programs"]
+  award_min: 1000
+  award_max: 250000
+  funder_types: ["federal", "state", "private foundation", "corporate"]
+  exclude: ["loans", "individual scholarships"]
+  max_opportunities: 5
+
+notes: |
+  Anything Claude should keep in mind when writing this client's email.
